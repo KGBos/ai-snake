@@ -6,7 +6,7 @@ import pygame
 
 from .config import (
     BLACK, BLUE, GREEN, RED, WHITE, SCREEN_WIDTH, SCREEN_HEIGHT,
-    HIGH_SCORE_FILE
+    HIGH_SCORE_FILE, SPRITES_DIR
 )
 
 
@@ -22,11 +22,39 @@ class SnakeGame:
         from .config import FONT, RETRO_FONT
         self.font = RETRO_FONT if nes_mode else FONT
         self.nes_mode = nes_mode
+        if self.nes_mode:
+            self.load_assets()
         self.score = 0
         self.last_food_time = None
         self.high_score = self.load_high_score()
         self.clock = pygame.time.Clock()
         self.reset()
+
+    def load_assets(self):
+        """Load NES style sprites and create CRT overlay."""
+        def load(name, color):
+            """Load sprite image or create a colored square if missing."""
+            path = os.path.join(SPRITES_DIR, name)
+            if os.path.exists(path):
+                surf = pygame.image.load(path).convert_alpha()
+            else:
+                surf = pygame.Surface((self.cell_size, self.cell_size))
+                surf.fill(color)
+            return pygame.transform.scale(surf, (self.cell_size, self.cell_size))
+
+        self.sprite_head = load('snake_head.png', WHITE)
+        self.sprite_body = load('snake_body.png', GREEN)
+        turn_path = os.path.join(SPRITES_DIR, 'snake_turn.png')
+        self.sprite_turn = load('snake_turn.png', GREEN) if os.path.exists(turn_path) else self.sprite_body
+        self.sprite_tail = load('snake_tail.png', BLUE)
+        self.sprite_food = load('food.png', RED)
+        self.bg_tile = load('background_tile.png', BLACK)
+        self.border_tile = load('border_tile.png', WHITE)
+
+        # Precompute CRT overlay surface for bonus effect
+        self.crt_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        for y in range(0, SCREEN_HEIGHT, 2):
+            pygame.draw.line(self.crt_overlay, (0, 0, 0, 40), (0, y), (SCREEN_WIDTH, y))
 
     def load_high_score(self):
         if os.path.exists(HIGH_SCORE_FILE):
@@ -99,6 +127,14 @@ class SnakeGame:
         else:
             self.grow = False
 
+    def dir_to_angle(self, d):
+        mapping = {(1, 0): 0, (0, 1): 90, (-1, 0): 180, (0, -1): 270}
+        return mapping.get(d, 0)
+
+    def blit_sprite(self, sprite, pos, angle=0):
+        rotated = pygame.transform.rotate(sprite, angle)
+        self.screen.blit(rotated, (pos[0] * self.cell_size, pos[1] * self.cell_size))
+
     def draw_cell(self, pos, color):
         x, y = pos
         rect = pygame.Rect(x * self.cell_size, y * self.cell_size,
@@ -109,28 +145,69 @@ class SnakeGame:
 
     def draw(self):
         from .config import FONT_SMALL
-        self.screen.fill(BLACK)
-        for i, segment in enumerate(self.snake):
-            self.draw_cell(segment, BLUE if i == 0 else GREEN)
-        self.draw_cell(self.food, RED)
         if self.nes_mode:
+            # draw tiled background
             for x in range(self.grid_width):
-                pygame.draw.line(self.screen, WHITE, (x * self.cell_size, 0), (x * self.cell_size, SCREEN_HEIGHT), 1)
+                for y in range(self.grid_height):
+                    self.blit_sprite(self.bg_tile, (x, y))
+            # optional border
+            for x in range(-1, self.grid_width + 1):
+                self.blit_sprite(self.border_tile, (x, -1))
+                self.blit_sprite(self.border_tile, (x, self.grid_height))
             for y in range(self.grid_height):
-                pygame.draw.line(self.screen, WHITE, (0, y * self.cell_size), (SCREEN_WIDTH, y * self.cell_size), 1)
-        multiplier = 2 if self.last_food_time and pygame.time.get_ticks() - self.last_food_time <= 3000 else 1
-        score_text = self.font.render(f'Score: {self.score} x{multiplier}', True, WHITE)
-        self.screen.blit(score_text, (5, 5))
-        help_lines = [
-            'Arrow keys: Move',
-            'T: Toggle AI',
-            'Esc: Pause',
-            '+/-: Speed',
-            'R: Restart'
-        ]
-        for i, line in enumerate(help_lines):
-            help_surf = FONT_SMALL.render(line, True, WHITE)
-            self.screen.blit(help_surf, (5, SCREEN_HEIGHT - (len(help_lines) - i) * 18))
+                self.blit_sprite(self.border_tile, (-1, y))
+                self.blit_sprite(self.border_tile, (self.grid_width, y))
+
+            # draw snake with sprites
+            for i, segment in enumerate(self.snake):
+                if i == 0:
+                    angle = self.dir_to_angle(self.direction)
+                    self.blit_sprite(self.sprite_head, segment, angle)
+                elif i == len(self.snake) - 1:
+                    prev = self.snake[i - 1]
+                    d = (segment[0] - prev[0], segment[1] - prev[1])
+                    self.blit_sprite(self.sprite_tail, segment, self.dir_to_angle(d))
+                else:
+                    prev = self.snake[i - 1]
+                    nxt = self.snake[i + 1]
+                    d1 = (segment[0] - prev[0], segment[1] - prev[1])
+                    d2 = (nxt[0] - segment[0], nxt[1] - segment[1])
+                    if d1[0] == d2[0] or d1[1] == d2[1]:
+                        angle = 0 if d1[0] != 0 else 90
+                        self.blit_sprite(self.sprite_body, segment, angle if d1[0] >= 0 or d1[1] >= 0 else angle + 180)
+                    else:
+                        key = {(1,0):(0,1), (0,1):(-1,0), (-1,0):(0,-1), (0,-1):(1,0)}
+                        angle = {((1,0),(0,1)):0, ((0,1),(-1,0)):90, ((-1,0),(0,-1)):180, ((0,-1),(1,0)):270}.get((d1,d2))
+                        if angle is None:
+                            angle = {((0,1),(1,0)):270, ((-1,0),(0,1)):0, ((0,-1),(-1,0)):90, ((1,0),(0,-1)):180}.get((d1,d2),0)
+                        self.blit_sprite(self.sprite_turn, segment, angle)
+
+            # draw food
+            self.blit_sprite(self.sprite_food, self.food)
+
+            # score display
+            score_text = self.font.render(f'SCORE: {self.score:06d}', True, WHITE)
+            self.screen.blit(score_text, (5, 5))
+
+            # help text
+            for i, line in enumerate(['Arrow keys: Move', 'T: Toggle AI', 'Esc: Pause', '+/-: Speed', 'R: Restart']):
+                help_surf = FONT_SMALL.render(line, True, WHITE)
+                self.screen.blit(help_surf, (5, SCREEN_HEIGHT - (5 - i) * 18))
+
+            # apply CRT overlay
+            self.screen.blit(self.crt_overlay, (0, 0))
+        else:
+            self.screen.fill(BLACK)
+            for i, segment in enumerate(self.snake):
+                self.draw_cell(segment, BLUE if i == 0 else GREEN)
+            self.draw_cell(self.food, RED)
+            multiplier = 2 if self.last_food_time and pygame.time.get_ticks() - self.last_food_time <= 3000 else 1
+            score_text = self.font.render(f'Score: {self.score} x{multiplier}', True, WHITE)
+            self.screen.blit(score_text, (5, 5))
+            for i, line in enumerate(['Arrow keys: Move', 'T: Toggle AI', 'Esc: Pause', '+/-: Speed', 'R: Restart']):
+                help_surf = FONT_SMALL.render(line, True, WHITE)
+                self.screen.blit(help_surf, (5, SCREEN_HEIGHT - (5 - i) * 18))
+
         pygame.display.flip()
 
     def game_loop(self):
@@ -161,7 +238,7 @@ class SnakeGame:
             self.save_high_score()
         self.screen.fill(BLACK)
         over_text = self.font.render('Game Over', True, WHITE)
-        score_text = self.font.render(f'Score: {self.score}', True, WHITE)
+        score_text = self.font.render(f'SCORE: {self.score:06d}', True, WHITE)
         high_text = self.font.render(f'High: {self.high_score}', True, WHITE)
         prompt = self.font.render('Press Enter to return to Main Menu', True, WHITE)
         self.screen.blit(over_text, over_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 40)))

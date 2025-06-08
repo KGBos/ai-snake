@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+assets/fonts/nes_font.ttf
+assets/sprites/*.png
