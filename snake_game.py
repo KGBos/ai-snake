@@ -25,7 +25,8 @@ HIGH_SCORE_FILE = 'high_score.txt'
 
 class SnakeGame:
     def __init__(self, speed=10, ai=False, grid=DEFAULT_GRID, nes_mode=False):
-        self.speed = speed
+        self.clock = pygame.time.Clock()
+        self.speed = 10  # Example speed value
         self.ai = ai
         self.grid_width, self.grid_height = grid
         self.cell_size = min(SCREEN_WIDTH // self.grid_width,
@@ -65,12 +66,17 @@ class SnakeGame:
         if len(self.snake) >= self.grid_width * self.grid_height:
             self.game_over = True
             return
-        while True:
+        attempts = 0
+        while attempts < 100:  # Limit attempts to avoid infinite loop
             self.food = (
                 random.randint(0, self.grid_width - 1),
                 random.randint(0, self.grid_height - 1))
             if self.food not in self.snake:
                 break
+            attempts += 1
+        else:
+            # If no valid position is found, end the game
+            self.game_over = True
 
     def neighbors(self, pos):
         x, y = pos
@@ -122,20 +128,28 @@ class SnakeGame:
     def ai_move(self):
         hx, hy = self.snake[0]
         moves = []
-        for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
             nx, ny = hx + dx, hy + dy
             if not (0 <= nx < self.grid_width and 0 <= ny < self.grid_height):
                 continue
             if (nx, ny) in list(self.snake)[:-1]:
                 continue
             area = self.open_area((nx, ny))
-            wall_dist = min(nx, self.grid_width-1-nx, ny, self.grid_height-1-ny)
             dist_food = abs(nx - self.food[0]) + abs(ny - self.food[1])
-            score = area + wall_dist - dist_food * 0.1
+            # Adjust the scoring formula to prioritize food and open area
+            score = area - dist_food * 0.5  # Reduce the weight of distance to food
             moves.append((score, (dx, dy)))
         if moves:
             moves.sort(reverse=True)
-            self.direction = moves[0][1]
+            for score, (dx, dy) in moves:
+                if (dx, dy) != (-self.direction[0], -self.direction[1]):
+                    self.direction = (dx, dy)
+                    break
+            else:
+                self.direction = moves[0][1]  # fallback in case all moves are reversals
+        else:
+            # Fallback to avoid crashes if no valid moves are found
+            self.direction = (0, 0)  # Stop the snake if no moves are possible
 
     def update(self):
         if self.ai:
