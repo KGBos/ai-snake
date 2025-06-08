@@ -68,12 +68,10 @@ class SnakeGame:
             if 0 <= nx < self.grid_width and 0 <= ny < self.grid_height:
                 yield nx, ny
 
-    def bfs(self):
-        start = self.snake[0]
-        goal = self.food
+    def bfs(self, start, goal, obstacles):
+        """Breadth-first search returning path from start to goal."""
         queue = deque([start])
         came_from = {start: None}
-        obstacles = set(list(self.snake)[:-1])
         while queue:
             current = queue.popleft()
             if current == goal:
@@ -93,6 +91,21 @@ class SnakeGame:
         path.reverse()
         return path
 
+    def path_exists(self, start, goal, obstacles):
+        """Simple check whether a path exists from start to goal."""
+        queue = deque([start])
+        visited = {start}
+        while queue:
+            current = queue.popleft()
+            if current == goal:
+                return True
+            for nxt in self.neighbors(current):
+                if nxt in obstacles or nxt in visited:
+                    continue
+                visited.add(nxt)
+                queue.append(nxt)
+        return False
+
     def open_area(self, start):
         queue = deque([start])
         visited = {start}
@@ -109,22 +122,43 @@ class SnakeGame:
         return count
 
     def ai_move(self):
-        hx, hy = self.snake[0]
-        moves = []
+        """Choose the next move for the AI snake."""
+        head = self.snake[0]
+        tail = self.snake[-1]
+        obstacles = set(list(self.snake)[:-1])
+
+        # Try to follow a safe path to the food
+        path = self.bfs(head, self.food, obstacles)
+        if path:
+            next_cell = path[0]
+            # simulate move to check that tail remains reachable
+            future_snake = list(self.snake)
+            future_snake.insert(0, next_cell)
+            if next_cell != self.food and not self.grow:
+                future_snake.pop()
+            new_head = next_cell
+            new_tail = future_snake[-1]
+            if self.path_exists(new_head, new_tail, set(future_snake[:-1])):
+                self.direction = (next_cell[0] - head[0], next_cell[1] - head[1])
+                return
+
+        # Fallback: choose move that maximises free space and wall distance
+        best_score = None
+        best_dir = None
         for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            nx, ny = hx + dx, hy + dy
+            nx, ny = head[0] + dx, head[1] + dy
             if not (0 <= nx < self.grid_width and 0 <= ny < self.grid_height):
                 continue
-            if (nx, ny) in list(self.snake)[:-1]:
+            if (nx, ny) in obstacles:
                 continue
             area = self.open_area((nx, ny))
             wall_dist = min(nx, self.grid_width - 1 - nx, ny, self.grid_height - 1 - ny)
-            dist_food = abs(nx - self.food[0]) + abs(ny - self.food[1])
-            score = area + wall_dist - dist_food * 0.1
-            moves.append((score, (dx, dy)))
-        if moves:
-            moves.sort(reverse=True)
-            self.direction = moves[0][1]
+            score = area + wall_dist * 0.5
+            if best_score is None or score > best_score:
+                best_score = score
+                best_dir = (dx, dy)
+        if best_dir:
+            self.direction = best_dir
 
     def update(self):
         if self.ai:
