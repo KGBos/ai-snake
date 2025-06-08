@@ -37,6 +37,9 @@ class SnakeGame:
         self.game_over = False
 
     def spawn_food(self):
+        if len(self.snake) >= GRID_WIDTH * GRID_HEIGHT:
+            self.game_over = True
+            return
         while True:
             self.food = (random.randint(0, GRID_WIDTH - 1), random.randint(0, GRID_HEIGHT - 1))
             if self.food not in self.snake:
@@ -51,10 +54,10 @@ class SnakeGame:
 
     def bfs(self):
         start = self.snake[0]
-        goal = self.food
+        goal = self.food  # cache food location
         queue = deque([start])
         came_from = {start: None}
-        obstacles = set(list(self.snake)[:-1])
+        obstacles = set(list(self.snake)[:-1])  # exclude tail since it will move unless growing
         while queue:
             current = queue.popleft()
             if current == goal:
@@ -90,7 +93,7 @@ class SnakeGame:
                         (nx, ny) not in list(self.snake)[:-1]):
                     possible.append((dx, dy))
             if possible:
-                self.direction = random.choice(possible)
+                self.direction = random.choice(sorted(possible))  # deterministic fallback
 
     def update(self):
         if self.ai:
@@ -117,8 +120,8 @@ class SnakeGame:
 
     def draw(self):
         self.screen.fill(BLACK)
-        for segment in self.snake:
-            self.draw_cell(segment, GREEN)
+        for i, segment in enumerate(self.snake):
+            self.draw_cell(segment, BLUE if i == 0 else GREEN)
         self.draw_cell(self.food, RED)
         pygame.display.flip()
 
@@ -133,14 +136,7 @@ class SnakeGame:
                     elif event.key == pygame.K_t:
                         self.ai = not self.ai
                     elif not self.ai:
-                        if event.key == pygame.K_UP and self.direction != (0,1):
-                            self.direction = (0,-1)
-                        elif event.key == pygame.K_DOWN and self.direction != (0,-1):
-                            self.direction = (0,1)
-                        elif event.key == pygame.K_LEFT and self.direction != (1,0):
-                            self.direction = (-1,0)
-                        elif event.key == pygame.K_RIGHT and self.direction != (-1,0):
-                            self.direction = (1,0)
+                        self.set_direction(event.key)
             self.update()
             self.draw()
             self.clock.tick(self.speed)
@@ -158,7 +154,21 @@ class SnakeGame:
                     waiting = False
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                     waiting = False
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                    self.reset()
+                    self.game_loop()
+                    return
             self.clock.tick(5)
+
+    def set_direction(self, key):
+        if key == pygame.K_UP and self.direction != (0,1):
+            self.direction = (0,-1)
+        elif key == pygame.K_DOWN and self.direction != (0,-1):
+            self.direction = (0,1)
+        elif key == pygame.K_LEFT and self.direction != (1,0):
+            self.direction = (-1,0)
+        elif key == pygame.K_RIGHT and self.direction != (-1,0):
+            self.direction = (1,0)
 
 
 def draw_centered_text(screen, text, y):
@@ -206,6 +216,8 @@ def main_menu():
         for i, opt in enumerate(options):
             color = BLUE if selection == i else WHITE
             text = FONT.render(opt, True, color)
+            if selection == i:
+                text = FONT.render(opt, True, color, BLACK)  # add background to selected
             rect = text.get_rect(center=(SCREEN_WIDTH//2, 120 + i * 40))
             screen.blit(text, rect)
         pygame.display.flip()
@@ -281,14 +293,7 @@ def main():
                     elif event.key == pygame.K_t:
                         game.ai = not game.ai
                     elif not game.ai:
-                        if event.key == pygame.K_UP and game.direction != (0,1):
-                            game.direction = (0,-1)
-                        elif event.key == pygame.K_DOWN and game.direction != (0,-1):
-                            game.direction = (0,1)
-                        elif event.key == pygame.K_LEFT and game.direction != (1,0):
-                            game.direction = (-1,0)
-                        elif event.key == pygame.K_RIGHT and game.direction != (-1,0):
-                            game.direction = (1,0)
+                        game.set_direction(event.key)
             game.update()
             game.draw()
             game.clock.tick(game.speed)
