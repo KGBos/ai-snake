@@ -1,6 +1,6 @@
 import pygame
 
-from .constants import (
+from .config import (
     BLUE, WHITE, BLACK, SCREEN_WIDTH, SCREEN_HEIGHT, DEFAULT_GRID,
     FONT, FONT_SMALL
 )
@@ -60,7 +60,7 @@ def settings_menu(settings):
 def main_menu():
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
-    options = ['Play Manual', 'Play AI', 'Settings', 'Quit']
+    options = ['AI Game', 'Human Game', 'Settings', 'Quit']
     selection = 0
     settings = {'speed': 10, 'grid': DEFAULT_GRID, 'nes': False}
     while True:
@@ -84,9 +84,9 @@ def main_menu():
                     selection = (selection + 1) % len(options)
                 elif event.key == pygame.K_RETURN:
                     if selection == 0:
-                        return settings, False
-                    elif selection == 1:
                         return settings, True
+                    elif selection == 1:
+                        return settings, False
                     elif selection == 2:
                         settings = settings_menu(settings)
                     elif selection == 3:

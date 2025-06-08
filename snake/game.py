@@ -4,7 +4,7 @@ from collections import deque
 
 import pygame
 
-from .constants import (
+from .config import (
     BLACK, BLUE, GREEN, RED, WHITE, SCREEN_WIDTH, SCREEN_HEIGHT,
     HIGH_SCORE_FILE
 )
@@ -19,7 +19,7 @@ class SnakeGame:
                              SCREEN_HEIGHT // self.grid_height)
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption('AI Snake')
-        from .constants import FONT, RETRO_FONT
+        from .config import FONT, RETRO_FONT
         self.font = RETRO_FONT if nes_mode else FONT
         self.nes_mode = nes_mode
         self.score = 0
@@ -61,108 +61,11 @@ class SnakeGame:
             if self.food not in self.snake:
                 break
 
-    def neighbors(self, pos):
-        x, y = pos
-        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < self.grid_width and 0 <= ny < self.grid_height:
-                yield nx, ny
-
-    def bfs(self, start, goal, obstacles):
-        """Breadth-first search returning path from start to goal."""
-        queue = deque([start])
-        came_from = {start: None}
-        while queue:
-            current = queue.popleft()
-            if current == goal:
-                break
-            for nxt in self.neighbors(current):
-                if nxt in obstacles or nxt in came_from:
-                    continue
-                came_from[nxt] = current
-                queue.append(nxt)
-        if goal not in came_from:
-            return None
-        path = []
-        node = goal
-        while node != start:
-            path.append(node)
-            node = came_from[node]
-        path.reverse()
-        return path
-
-    def path_exists(self, start, goal, obstacles):
-        """Simple check whether a path exists from start to goal."""
-        queue = deque([start])
-        visited = {start}
-        while queue:
-            current = queue.popleft()
-            if current == goal:
-                return True
-            for nxt in self.neighbors(current):
-                if nxt in obstacles or nxt in visited:
-                    continue
-                visited.add(nxt)
-                queue.append(nxt)
-        return False
-
-    def open_area(self, start):
-        queue = deque([start])
-        visited = {start}
-        obstacles = set(self.snake)
-        count = 0
-        while queue:
-            x, y = queue.popleft()
-            count += 1
-            for nx, ny in self.neighbors((x, y)):
-                if (nx, ny) in obstacles or (nx, ny) in visited:
-                    continue
-                visited.add((nx, ny))
-                queue.append((nx, ny))
-        return count
-
-    def ai_move(self):
-        """Choose the next move for the AI snake."""
-        head = self.snake[0]
-        tail = self.snake[-1]
-        obstacles = set(list(self.snake)[:-1])
-
-        # Try to follow a safe path to the food
-        path = self.bfs(head, self.food, obstacles)
-        if path:
-            next_cell = path[0]
-            # simulate move to check that tail remains reachable
-            future_snake = list(self.snake)
-            future_snake.insert(0, next_cell)
-            if next_cell != self.food and not self.grow:
-                future_snake.pop()
-            new_head = next_cell
-            new_tail = future_snake[-1]
-            if self.path_exists(new_head, new_tail, set(future_snake[:-1])):
-                self.direction = (next_cell[0] - head[0], next_cell[1] - head[1])
-                return
-
-        # Fallback: choose move that maximises free space and wall distance
-        best_score = None
-        best_dir = None
-        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            nx, ny = head[0] + dx, head[1] + dy
-            if not (0 <= nx < self.grid_width and 0 <= ny < self.grid_height):
-                continue
-            if (nx, ny) in obstacles:
-                continue
-            area = self.open_area((nx, ny))
-            wall_dist = min(nx, self.grid_width - 1 - nx, ny, self.grid_height - 1 - ny)
-            score = area + wall_dist * 0.5
-            if best_score is None or score > best_score:
-                best_score = score
-                best_dir = (dx, dy)
-        if best_dir:
-            self.direction = best_dir
 
     def update(self):
         if self.ai:
-            self.ai_move()
+            from .ai import ai_move
+            ai_move(self)
         self.move_snake()
         self.check_collision()
         self.handle_growth()
@@ -205,7 +108,7 @@ class SnakeGame:
             pygame.draw.rect(self.screen, WHITE, rect, 1)
 
     def draw(self):
-        from .constants import FONT_SMALL
+        from .config import FONT_SMALL
         self.screen.fill(BLACK)
         for i, segment in enumerate(self.snake):
             self.draw_cell(segment, BLUE if i == 0 else GREEN)
@@ -252,7 +155,7 @@ class SnakeGame:
         self.show_game_over()
 
     def show_game_over(self):
-        from .constants import FONT
+        from .config import FONT
         if self.score > self.high_score:
             self.high_score = self.score
             self.save_high_score()

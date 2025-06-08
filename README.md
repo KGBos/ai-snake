@@ -17,7 +17,7 @@ pip install pygame==2.5.0
 Run the game with:
 
 ```bash
-python3 snake_game.py
+python3 main.py
 ```
 
 Use the arrow keys to navigate the menu. During the game, press `Esc` to open the pause menu. From there you can toggle AI control or change the speed.

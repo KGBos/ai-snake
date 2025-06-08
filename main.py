@@ -1,8 +1,8 @@
 import pygame
 
 from snake.game import SnakeGame
-from snake.menus import main_menu, pause_menu
-from snake.constants import DEFAULT_GRID
+from snake.menu import main_menu, pause_menu
+from snake.config import DEFAULT_GRID
 
 settings = {'speed': 10, 'grid': DEFAULT_GRID, 'nes': False}
 game = SnakeGame(speed=settings['speed'], ai=False,
