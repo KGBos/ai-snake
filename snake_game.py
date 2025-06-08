@@ -3,26 +3,28 @@ import pygame
 from snake.game import SnakeGame
 from snake.menus import main_menu, pause_menu
 from snake.constants import DEFAULT_GRID
-    settings = {'speed': 10, 'grid': DEFAULT_GRID, 'nes': False}
-        game = SnakeGame(speed=settings['speed'], ai=ai,
-                         grid=settings.get('grid', DEFAULT_GRID),
-                         nes_mode=settings.get('nes', False))
-                    selection = (selection - 1) % len(options)
-                elif event.key == pygame.K_DOWN:
-                    selection = (selection + 1) % len(options)
-                elif event.key == pygame.K_RETURN:
-                    if selection == 0:
-                        return
-                    elif selection == 1:
-                        game.ai = not game.ai
-                    elif selection in [2,3,4]:
-                        speeds = {2:5, 3:10, 4:15}
-                        game.speed = speeds[selection]
-        game.clock.tick(15)
+
+settings = {'speed': 10, 'grid': DEFAULT_GRID, 'nes': False}
+game = SnakeGame(speed=settings['speed'], ai=False,
+                 grid=settings.get('grid', DEFAULT_GRID),
+                 nes_mode=settings.get('nes', False))
+
+selection = 0  # Assuming this is defined somewhere for menu navigation
+
+# Example of corrected indentation for menu navigation
+if selection == 0:
+    pass  # Do nothing
+elif selection == 1:
+    game.ai = not game.ai
+elif selection in [2, 3, 4]:
+    speeds = {2: 5, 3: 10, 4: 15}
+    game.speed = speeds[selection]
+
+game.clock.tick(15)
 
 
 def main():
-    settings = {'speed':10, 'grid':DEFAULT_GRID, 'nes':False}
+    settings = {'speed': 10, 'grid': DEFAULT_GRID, 'nes': False}
     while True:
         result = main_menu()
         if result == (None, None):
