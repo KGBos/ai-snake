@@ -186,4 +186,14 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Project-specific ignores
+# Model weights and training outputs
+best_snake_ai.pth
+fast_training_*/
+training_output_*/
+training_log.txt
+
+# Ignore all __pycache__ folders recursively
+**/__pycache__/ 
