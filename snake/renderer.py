@@ -16,11 +16,21 @@ class GameRenderer:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption('AI Snake')
         self.cell_size = None  # Will be set when grid size is known
+        self.game_area_height = None  # Height of the game grid area
+        self.stats_area_y = None  # Y position where stats start
     
     def set_grid_size(self, grid_width: int, grid_height: int):
         """Set the grid size and calculate cell size."""
+        # Reserve space for stats area at the bottom
+        stats_area_height = 120  # Height for learning statistics
+        available_height = SCREEN_HEIGHT - stats_area_height
+        
         self.cell_size = min(SCREEN_WIDTH // grid_width,
-                            SCREEN_HEIGHT // grid_height)
+                            available_height // grid_height)
+        
+        # Calculate game area dimensions
+        self.game_area_height = grid_height * self.cell_size
+        self.stats_area_y = self.game_area_height
     
     def draw_cell(self, pos: Tuple[int, int], color: Tuple[int, int, int]):
         """Draw a single cell at the given position."""
@@ -42,7 +52,7 @@ class GameRenderer:
         for x in range(grid_width):
             pygame.draw.line(self.screen, WHITE, 
                            (x * self.cell_size, 0), 
-                           (x * self.cell_size, SCREEN_HEIGHT), 1)
+                           (x * self.cell_size, self.game_area_height), 1)
         for y in range(grid_height):
             pygame.draw.line(self.screen, WHITE, 
                            (0, y * self.cell_size), 
@@ -59,15 +69,73 @@ class GameRenderer:
         self.draw_cell(food_pos, RED)
     
     def draw_score(self, score: int, multiplier: int = 1):
-        """Draw the score display."""
+        """Draw the score display in the game area."""
         score_text = self.font.render(f'Score: {score} x{multiplier}', True, WHITE)
         self.screen.blit(score_text, (5, 5))
     
+    def draw_learning_stats(self, stats: dict, episode_count: int):
+        """Draw learning statistics in the dedicated area below the game."""
+        if self.stats_area_y is None:
+            return
+            
+        # Clear the stats area
+        stats_rect = pygame.Rect(0, self.stats_area_y, SCREEN_WIDTH, SCREEN_HEIGHT - self.stats_area_y)
+        pygame.draw.rect(self.screen, BLACK, stats_rect)
+        
+        # Draw separator line
+        if self.stats_area_y is not None:
+            stats_y = int(self.stats_area_y)
+            pygame.draw.line(self.screen, WHITE, (0, stats_y), (SCREEN_WIDTH, stats_y), 2)
+        
+        # Draw stats in columns
+        y_offset = self.stats_area_y + 10
+        line_height = 20
+        
+        # Left column
+        left_x = 10
+        stats_lines = [
+            f"Episode: {episode_count}",
+            f"Epsilon: {stats.get('epsilon', 0):.3f}",
+            f"Training Steps: {stats.get('training_step', 0)}",
+            f"Memory Size: {stats.get('memory_size', 0)}"
+        ]
+        
+        for i, line in enumerate(stats_lines):
+            text_surf = FONT_SMALL.render(line, True, WHITE)
+            self.screen.blit(text_surf, (left_x, y_offset + i * line_height))
+        
+        # Right column
+        right_x = SCREEN_WIDTH // 2 + 10
+        reward_lines = [
+            f"Avg Reward: {stats.get('avg_reward', 0):.2f}",
+            f"Best Reward: {stats.get('best_reward', 0):.2f}",
+            f"Recent Avg: {stats.get('recent_avg', 0):.2f}",
+            f"Improvement: {stats.get('improvement', 0):+.2f}"
+        ]
+        
+        for i, line in enumerate(reward_lines):
+            text_surf = FONT_SMALL.render(line, True, WHITE)
+            self.screen.blit(text_surf, (right_x, y_offset + i * line_height))
+        
+        # Bottom area for additional info
+        bottom_y = self.stats_area_y + 90
+        info_lines = [
+            "Controls: L=Toggle AI, S=Save Model, ESC=Quit",
+            "Training: Learning from experience, improving over time"
+        ]
+        
+        for i, line in enumerate(info_lines):
+            text_surf = FONT_SMALL.render(line, True, (200, 200, 200))
+            self.screen.blit(text_surf, (10, bottom_y + i * 15))
+    
     def draw_help_text(self, help_lines: list):
-        """Draw help text at the bottom of the screen."""
+        """Draw help text in the stats area."""
+        if self.stats_area_y is None:
+            return
+            
         for i, line in enumerate(help_lines):
             help_surf = FONT_SMALL.render(line, True, WHITE)
-            self.screen.blit(help_surf, (5, SCREEN_HEIGHT - (len(help_lines) - i) * 18))
+            self.screen.blit(help_surf, (5, self.stats_area_y + 60 + i * 15))
     
     def draw_game_over_screen(self, score: int, high_score: int):
         """Draw the game over screen."""
@@ -85,7 +153,7 @@ class GameRenderer:
         
         pygame.display.flip()
     
-    def render_game(self, game_state: GameState, current_time: int):
+    def render_game(self, game_state: GameState, current_time: int, learning_stats: Optional[dict] = None, episode_count: int = 0):
         """Render the complete game state."""
         self.screen.fill(BLACK)
         
@@ -93,24 +161,29 @@ class GameRenderer:
         if self.cell_size is None:
             self.set_grid_size(game_state.grid_width, game_state.grid_height)
         
-        # Draw game elements
+        # Draw game elements (only in the game area)
         self.draw_snake(game_state.get_snake_body())
         self.draw_food(game_state.food)
         self.draw_grid(game_state.grid_width, game_state.grid_height)
         
-        # Draw UI
+        # Draw UI in game area
         multiplier = 2 if (game_state.last_food_time and 
                           current_time - game_state.last_food_time <= 3000) else 1
         self.draw_score(game_state.score, multiplier)
         
-        help_lines = [
-            'Arrow keys: Move',
-            'T: Toggle AI',
-            'Esc: Pause',
-            '+/-: Speed',
-            'R: Restart'
-        ]
-        self.draw_help_text(help_lines)
+        # Draw learning stats in dedicated area
+        if learning_stats:
+            self.draw_learning_stats(learning_stats, episode_count)
+        else:
+            # Draw regular help text if no learning stats
+            help_lines = [
+                'Arrow keys: Move',
+                'T: Toggle AI',
+                'Esc: Pause',
+                '+/-: Speed',
+                'R: Restart'
+            ]
+            self.draw_help_text(help_lines)
         
         pygame.display.flip()
     

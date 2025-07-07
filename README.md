@@ -1,189 +1,252 @@
 # AI Snake Game
 
-A modern, well-architected Snake game built with Pygame featuring both manual and AI-controlled gameplay. The codebase has been refactored for improved testability, maintainability, and separation of concerns.
+A Python-based Snake game with both rule-based and learning AI implementations. The game features a modular architecture with separate components for game logic, AI, rendering, and menus.
 
-## 🏗️ Architecture
+## Features
 
-The project follows a clean architecture pattern with clear separation of concerns:
+- **Classic Snake Gameplay**: Traditional snake game with food collection and collision detection
+- **Rule-based AI**: Intelligent pathfinding AI using A* algorithm and fallback strategies
+- **Deep Q-Learning AI**: Neural network-based AI that learns from experience
+- **GPU Acceleration**: CUDA support for faster training on NVIDIA GPUs
+- **Modular Architecture**: Clean separation of concerns with testable components
+- **Comprehensive Testing**: Automated test suite for game logic
+- **Performance Monitoring**: Detailed AI tracing and performance metrics
+- **Training Visualization**: Real-time plots and statistics during training
 
-### Core Components
+## Installation
 
-- **`models.py`**: Pure game state logic (no pygame dependencies)
-- **`renderer.py`**: All rendering logic separated from game logic
-- **`ai_controller.py`**: AI pathfinding and decision making
-- **`game_controller.py`**: Game loop and coordination
-- **`menu_controller.py`**: Menu navigation and logic
-- **`config.py`**: Configuration constants and settings
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd ai-snake
+   ```
 
-### Key Improvements
+2. **Create a virtual environment**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-✅ **Testable**: Game logic separated from pygame rendering  
-✅ **Modular**: Each component has a single responsibility  
-✅ **Maintainable**: Clear interfaces and dependency injection  
-✅ **Extensible**: Easy to add new features or AI algorithms  
+3. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## 🚀 Quick Start
+## Quick Start
 
-### Requirements
-- Python 3.10 or later
-- pygame 2.5.0
-
-### Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd ai-snake
-
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Running the Game
-
+### Play the Game
 ```bash
 python main.py
 ```
 
-### Running Tests
-
+### Run with Rule-based AI
 ```bash
-# Run all tests
-python -m pytest tests/
-
-# Run specific test file
-python tests/test_game_state.py
+python main.py
+# Press 'T' to toggle AI on/off
 ```
 
-## 🎮 Game Features
+### Train the Learning AI
+```bash
+# Quick training (1000 episodes)
+python train_ai.py --episodes 1000
 
-- **Dual Gameplay**: Manual control or AI-controlled snake
-- **Smart AI**: Pathfinding algorithm with fallback strategies
-- **Customizable Settings**: Speed, grid size, NES-style mode
-- **Score System**: High score tracking with multiplier bonuses
-- **Pause Menu**: In-game settings and AI toggle
+# Extended training with custom settings
+python train_ai.py --episodes 5000 --grid-size 20 20 --device cuda
+```
 
-## 🎯 Controls
+### Run with Pre-trained Model
+```bash
+python main.py --learning --model snake_dqn_model.pth
+```
 
-### Menu Navigation
-- **Arrow Keys**: Navigate options
-- **Enter**: Select option
+## Game Controls
 
-### In-Game Controls
 - **Arrow Keys**: Move snake (manual mode)
-- **T**: Toggle AI control
-- **Esc**: Pause menu
+- **T**: Toggle rule-based AI
+- **L**: Toggle learning AI (when available)
+- **S**: Save learning model
 - **+/-**: Adjust game speed
+- **ESC**: Pause/Quit
+- **ENTER**: Continue after game over
 - **R**: Restart game
 
-## 🧪 Testing
+## AI Modes
 
-The refactored architecture makes testing much easier:
+### Rule-based AI
+The traditional AI uses intelligent pathfinding:
+- **A* Pathfinding**: Finds optimal path to food
+- **Fallback Strategy**: Avoids walls and self when pathfinding fails
+- **Performance Tracking**: Detailed metrics and tracing
 
-```python
-# Test game state logic without pygame
-from snake.models import GameState
+### Deep Q-Learning AI
+The learning AI uses reinforcement learning:
+- **Neural Network**: Convolutional neural network for state representation
+- **Experience Replay**: Stores and learns from past experiences
+- **Epsilon-Greedy**: Balances exploration and exploitation
+- **GPU Acceleration**: CUDA support for faster training
 
-state = GameState(grid_width=10, grid_height=10)
-state.move_snake()
-assert state.get_snake_head() == (6, 5)  # Moved right
-```
+## Training the Learning AI
 
-### Running Tests
-
+### Basic Training
 ```bash
-# Install test dependencies
-pip install pytest
-
-# Run all tests
-pytest tests/
-
-# Run with coverage
-pytest --cov=snake tests/
+python train_ai.py --episodes 1000
 ```
 
-## 📁 Project Structure
+### Advanced Training Options
+```bash
+# Custom grid size
+python train_ai.py --episodes 2000 --grid-size 15 15
 
+# Use CPU instead of GPU
+python train_ai.py --episodes 1000 --device cpu
+
+# Load pre-trained model
+python train_ai.py --episodes 1000 --model existing_model.pth
+
+# Custom save interval
+python train_ai.py --episodes 5000 --save-interval 200
+```
+
+### Training Output
+The training script creates:
+- **Model files**: `model_episode_X.pth`
+- **Statistics**: `stats_episode_X.json`
+- **Plots**: `training_plots_episode_X.png`
+- **Output directory**: `training_output_YYYYMMDD_HHMMSS/`
+
+## Architecture
+
+### Core Components
+- **`models.py`**: Game state and logic
+- **`renderer.py`**: Graphics and UI rendering
+- **`ai_controller.py`**: Rule-based AI implementation
+- **`learning_ai_controller.py`**: DQN learning AI
+- **`dqn_agent.py`**: Neural network and training logic
+- **`game_controller.py`**: Main game loop coordination
+- **`menu_controller.py`**: Menu system
+
+### Neural Network Architecture
+- **Input**: 3-channel grid representation (snake body, food, head)
+- **Convolutional Layers**: 3 conv layers with ReLU activation
+- **Fully Connected**: 2 FC layers with 256 and 128 neurons
+- **Output**: 4 action values (up, down, left, right)
+
+## Testing
+
+### Run All Tests
+```bash
+pytest
+```
+
+### Run Specific Tests
+```bash
+pytest tests/test_models.py
+pytest tests/test_ai_controller.py
+```
+
+### AI Performance Testing
+```bash
+# Batch test rule-based AI
+python test_ai_performance.py --games 100 --speed 50
+
+# Quick test
+python quick_test.py --games 10
+```
+
+## Performance Monitoring
+
+### AI Tracing
+Enable detailed AI tracing to see decision-making:
+```bash
+python main.py
+# Press 'T' to enable AI, then watch console output
+```
+
+### Training Statistics
+During training, monitor:
+- **Episode Rewards**: Total reward per episode
+- **Average Reward**: Moving average over 100 episodes
+- **Food Eaten**: Number of food items collected
+- **Epsilon**: Exploration rate (decays over time)
+
+## Configuration
+
+### Game Settings
+- **Grid Size**: Default 20x20, customizable
+- **Speed**: Adjustable game speed
+- **NES Mode**: Retro font and styling
+- **Auto-advance**: Skip game over screen
+
+### AI Settings
+- **Learning Rate**: 0.001 (DQN)
+- **Gamma**: 0.99 (discount factor)
+- **Epsilon**: 1.0 → 0.01 (exploration decay)
+- **Memory Size**: 10,000 experiences
+- **Batch Size**: 32 for training
+
+## Development
+
+### Project Structure
 ```
 ai-snake/
-├── main.py                 # Entry point
-├── requirements.txt        # Dependencies
-├── .gitignore            # Git ignore rules
-├── README.md             # This file
-├── snake/                # Main package
-│   ├── __init__.py
-│   ├── config.py         # Configuration constants
-│   ├── models.py         # Game state logic
-│   ├── renderer.py       # Rendering logic
-│   ├── ai_controller.py  # AI logic
-│   ├── game_controller.py # Game coordination
-│   ├── menu_controller.py # Menu logic
-│   ├── game.py           # Legacy (deprecated)
-│   ├── menu.py           # Legacy (deprecated)
-│   └── ai.py             # Legacy (deprecated)
-└── tests/                # Test suite
-    └── test_game_state.py
+├── snake/                 # Core game modules
+│   ├── models.py         # Game state
+│   ├── renderer.py       # Graphics
+│   ├── ai_controller.py  # Rule-based AI
+│   ├── learning_ai_controller.py  # Learning AI
+│   ├── dqn_agent.py     # Neural network
+│   ├── game_controller.py # Game loop
+│   └── menu_controller.py # Menus
+├── tests/                # Test suite
+├── train_ai.py          # Training script
+├── test_ai_performance.py # Performance testing
+├── main.py              # Entry point
+└── requirements.txt     # Dependencies
 ```
 
-## 🔧 Development
+### Adding Features
+1. **New AI Strategy**: Add to `ai_controller.py`
+2. **UI Changes**: Modify `renderer.py`
+3. **Game Logic**: Update `models.py`
+4. **Training**: Extend `dqn_agent.py`
 
-### Adding New Features
-
-1. **Game Logic**: Add to `models.py` (pure logic)
-2. **Rendering**: Add to `renderer.py` (visual only)
-3. **AI**: Add to `ai_controller.py` (decision making)
-4. **Menus**: Add to `menu_controller.py` (navigation)
-
-### Code Style
-
-- Follow PEP 8
-- Use type hints
-- Write docstrings for all public methods
-- Keep components loosely coupled
-
-## 🤖 AI Algorithm
-
-The AI uses a sophisticated pathfinding approach:
-
-1. **Primary Strategy**: BFS pathfinding to food
-2. **Safety Check**: Ensures path to tail exists after move
-3. **Fallback**: Open area calculation with wall distance
-4. **Scoring**: Combines accessible area and wall proximity
-
-## 📈 Performance
-
-- **60 FPS**: Smooth gameplay at all speeds
-- **Memory Efficient**: Minimal object creation
-- **CPU Optimized**: Efficient pathfinding algorithms
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
-1. **Pygame not found**: Install with `pip install pygame==2.5.0`
-2. **Display issues**: Ensure X11 forwarding in WSL
-3. **Performance**: Lower speed setting if laggy
-
-### Debug Mode
-
-```python
-# Add to main.py for debugging
-import logging
-logging.basicConfig(level=logging.DEBUG)
+**CUDA not available**:
+```bash
+python train_ai.py --device cpu
 ```
 
-## 🤝 Contributing
+**Training too slow**:
+- Reduce grid size: `--grid-size 15 15`
+- Use GPU: `--device cuda`
+- Increase speed: `--speed 20`
+
+**Model not learning**:
+- Increase episodes: `--episodes 5000`
+- Check reward function in `learning_ai_controller.py`
+- Monitor epsilon decay
+
+### Performance Tips
+- **GPU Training**: Use CUDA for 10x speedup
+- **Batch Size**: Increase for faster training (if memory allows)
+- **Grid Size**: Smaller grids train faster
+- **Save Interval**: Balance between progress tracking and disk usage
+
+## License
+
+This project is open source. See LICENSE file for details.
+
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Write tests for new functionality
+3. Add tests for new functionality
 4. Ensure all tests pass
 5. Submit a pull request
 
-## 📄 License
+## Version History
 
-This project is open source and available under the MIT License.
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history and release notes.
