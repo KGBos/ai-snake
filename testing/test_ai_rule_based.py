@@ -1,10 +1,5 @@
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src/ai')))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src/game')))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-from ai.rule_based import AIController
-from game.models import GameState
+from src.ai.rule_based import AIController
+from src.game.models import GameState
 from src.utils.logging_utils import setup_logging
 
 setup_logging(log_to_file=False, log_to_console=True, log_level='INFO')

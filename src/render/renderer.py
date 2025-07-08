@@ -1,14 +1,14 @@
 import pygame
 import logging
 from typing import Tuple, Optional, List, Dict
-from config.config import (
+from src.config.config import (
     BLACK, BLUE, GREEN, RED, WHITE, SCREEN_WIDTH, SCREEN_HEIGHT,
     FONT, FONT_SMALL, RETRO_FONT
 )
-from game.models import GameState
-from config.loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file
-from render.leaderboard import Leaderboard
-from render.base import BaseRenderer
+from src.game.models import GameState
+from src.config.loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file
+from src.render.leaderboard import Leaderboard
+from src.render.base import BaseRenderer
 
 logger = logging.getLogger(__name__)
 

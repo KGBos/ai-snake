@@ -4,12 +4,12 @@ from collections import deque
 
 import pygame
 
-from config.config import (
+from src.config.config import (
     BLACK, BLUE, GREEN, RED, WHITE, SCREEN_WIDTH, SCREEN_HEIGHT,
     HIGH_SCORE_FILE
 )
-from config.loader import *
-from game.models import GameState
+from src.config.loader import *
+from src.game.models import GameState
 
 
 class SnakeGame:
@@ -21,7 +21,7 @@ class SnakeGame:
                              SCREEN_HEIGHT // self.grid_height)
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption('AI Snake')
-        from config.config import FONT, RETRO_FONT
+        from src.config.config import FONT, RETRO_FONT
         self.font = RETRO_FONT if nes_mode else FONT
         self.nes_mode = nes_mode
         self.score = 0
@@ -116,7 +116,7 @@ class SnakeGame:
             pygame.draw.rect(self.screen, WHITE, rect, 1)
 
     def draw(self):
-        from config.config import FONT_SMALL
+        from src.config.config import FONT_SMALL
         self.screen.fill(BLACK)
         for i, segment in enumerate(self.snake):
             self.draw_cell(segment, BLUE if i == 0 else GREEN)
@@ -163,7 +163,7 @@ class SnakeGame:
         self.show_game_over()
 
     def show_game_over(self):
-        from config.config import FONT
+        from src.config.config import FONT
         if self.score > self.high_score:
             self.high_score = self.score
             self.save_high_score()

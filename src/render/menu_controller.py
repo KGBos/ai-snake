@@ -1,7 +1,7 @@
 import pygame
 from typing import Optional, Tuple
-from config.config import DEFAULT_GRID
-from render.renderer import MenuRenderer
+from src.config.config import DEFAULT_GRID
+from src.render.renderer import MenuRenderer
 
 
 class MenuController:

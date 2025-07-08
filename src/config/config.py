@@ -1,5 +1,5 @@
 import pygame
-from .loader import load_config, get_screen_size
+from src.config.loader import load_config, get_screen_size
 
 # Game constants
 config = load_config('src/config/config.yaml')

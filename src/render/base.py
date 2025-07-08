@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional
-from game.models import GameState
+from src.game.models import GameState
 
 class BaseRenderer(ABC):
     @abstractmethod
