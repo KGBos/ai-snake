@@ -6,13 +6,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import pygame
 from src.game_controller import GameController
-from src.config_loader import load_config, get_grid_size, get_game_speed, get_nes_mode, get_auto_advance, get_ai_tracing, get_model_path
+from src.config.loader import load_config, get_grid_size, get_game_speed, get_nes_mode, get_auto_advance, get_ai_tracing, get_model_path
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="AI Snake Game Launcher")
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
-    parser.add_argument('--config', type=str, default='src/config.yaml', help='Path to config file')
+    parser.add_argument('--config', type=str, default='src/config/config.yaml', help='Path to config file')
     subparsers = parser.add_subparsers(dest='command', help='Sub-commands')
 
     # Play subcommand
@@ -29,6 +29,7 @@ def parse_args():
     play_parser.add_argument('--verbose', action='store_true', help='Enable verbose logging for real-time RL observation')
     play_parser.add_argument('--headless', action='store_true', help='Run in true headless mode (no rendering)')
     play_parser.add_argument('--starvation-threshold', type=int, default=None, help='Override starvation threshold (moves without food) for this session')
+    play_parser.add_argument('--web', action='store_true', help='Use web renderer (localhost Flask)')
 
     # Test model subcommand
     test_parser = subparsers.add_parser('test-model', help='Test a trained model')
@@ -82,6 +83,7 @@ def play_game(args):
         learning_ai=args.learning,
         model_path=model_path,
         headless=getattr(args, 'headless', False),
+        web=getattr(args, 'web', False),
         starvation_threshold=starvation_threshold
     )
     

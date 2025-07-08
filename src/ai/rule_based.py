@@ -1,7 +1,7 @@
 from collections import deque
 from typing import Tuple, Optional, List
 import logging
-from src.models import GameState
+from game.models import GameState
 
 
 class AIController:
@@ -94,7 +94,8 @@ class AIController:
         """Get the best direction for the AI to move."""
         head = game_state.get_snake_head()
         tail = game_state.get_snake_tail()
-        obstacles = set(game_state.get_snake_body()[:-1])
+        snake_body = game_state.get_snake_body()
+        obstacles = set(snake_body[:-1])
         
         decision_info = {
             'move_number': self.move_count,
@@ -295,7 +296,8 @@ def ai_move(game):
     """Choose next move for the game's snake (stateless, for legacy use)."""
     head = game.snake[0]
     tail = game.snake[-1]
-    obstacles = set(list(game.snake)[:-1])
+    snake_body = list(game.snake)
+    obstacles = set(snake_body[:-1])
 
     path = AIController.bfs(head, game.food, obstacles, game.grid_width, game.grid_height)
     if path:

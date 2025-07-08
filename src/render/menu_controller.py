@@ -1,6 +1,6 @@
 import pygame
 from typing import Optional, Tuple
-from .config import DEFAULT_GRID
+from config.config import DEFAULT_GRID
 from render.renderer import MenuRenderer
 
 

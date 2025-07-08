@@ -8,9 +8,10 @@ from config.config import (
 from game.models import GameState
 from config.loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file
 from render.leaderboard import Leaderboard
+from render.base import BaseRenderer
 
 
-class GameRenderer:
+class GameRenderer(BaseRenderer):
     """Handles all rendering logic for the snake game with three-panel layout."""
     
     def __init__(self, nes_mode: bool = False, headless: bool = False):
@@ -24,7 +25,7 @@ class GameRenderer:
             self.screen = None
         
         # Load config
-        config = load_config('config/config.yaml')
+        config = load_config('src/config/config.yaml')
         self.panel_padding = get_panel_padding(config)
         self.grid_padding = get_grid_padding(config)
         self.leaderboard_file = get_leaderboard_file(config)
@@ -390,7 +391,7 @@ class GameRenderer:
             stats_surf = FONT_SMALL.render(stats_text, True, (200, 200, 200))
             self.screen.blit(stats_surf, (x_offset, y_offset))
     
-    def render_game(self, game_state: GameState, current_time: int, info: Optional[dict] = None):
+    def render(self, game_state: GameState, current_time: int, info: Optional[dict] = None):
         """Render the complete game state with three-panel layout."""
         if self.headless or self.screen is None:
             return

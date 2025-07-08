@@ -16,14 +16,14 @@ class InputHandler:
             elif event.key == pygame.K_t:
                 self.game_controller.ai = not self.game_controller.ai
             elif event.key == pygame.K_l:
-                if self.game_controller.learning_ai_controller:
+                if hasattr(self.game_controller, 'ai_manager') and self.game_controller.ai_manager.learning_ai_controller:
                     self.game_controller.learning_ai = not self.game_controller.learning_ai
             elif event.key == pygame.K_m:
-                if self.game_controller.learning_ai and self.game_controller.learning_ai_controller:
+                if self.game_controller.learning_ai and hasattr(self.game_controller, 'ai_manager') and self.game_controller.ai_manager.learning_ai_controller:
                     self.game_controller.manual_teaching_mode = not getattr(self.game_controller, 'manual_teaching_mode', False)
             elif event.key == pygame.K_p:
-                if self.game_controller.learning_ai_controller:
-                    self.game_controller.learning_ai_controller.set_training_mode(not self.game_controller.learning_ai_controller.training)
+                if hasattr(self.game_controller, 'ai_manager') and self.game_controller.ai_manager.learning_ai_controller:
+                    self.game_controller.ai_manager.learning_ai_controller.set_training_mode(not self.game_controller.ai_manager.learning_ai_controller.training)
             elif event.key in (pygame.K_PLUS, pygame.K_EQUALS):
                 self.game_controller.speed += 1
             elif event.key == pygame.K_MINUS:

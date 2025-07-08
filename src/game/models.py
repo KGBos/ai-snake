@@ -62,7 +62,8 @@ class GameState:
             return
         
         # Check for self collision immediately
-        if (nx, ny) in list(self.snake)[1:]:
+        snake_body = list(self.snake)
+        if (nx, ny) in snake_body[1:]:
             self.game_over = True
             self.death_type = 'self'
             return
@@ -93,10 +94,14 @@ class GameState:
     
     def set_direction(self, new_direction: Tuple[int, int], force: bool = False):
         """Set the snake's direction if it's valid."""
-        # Prevent 180-degree turns (unless forced by AI)
-        if force or (new_direction[0] != -self.direction[0] or 
-            new_direction[1] != -self.direction[1]):
-            self.direction = new_direction
+        # Normalize directions to prevent subtle bugs
+        if not isinstance(new_direction, tuple) or len(new_direction) != 2:
+            return
+        ndx, ndy = new_direction
+        cdx, cdy = self.direction
+        # Only allow 180-degree turn if forced
+        if force or (ndx, ndy) != (-cdx, -cdy):
+            self.direction = (ndx, ndy)
     
     def get_snake_head(self) -> Tuple[int, int]:
         """Get the snake's head position."""

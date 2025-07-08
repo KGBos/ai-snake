@@ -31,17 +31,23 @@ class SnakeGame:
         self.reset()
 
     def load_high_score(self):
-        if os.path.exists(HIGH_SCORE_FILE):
-            with open(HIGH_SCORE_FILE, 'r') as f:
-                try:
-                    return int(f.read().strip())
-                except ValueError:
-                    return 0
+        try:
+            if os.path.exists(HIGH_SCORE_FILE):
+                with open(HIGH_SCORE_FILE, 'r') as f:
+                    try:
+                        return int(f.read().strip())
+                    except ValueError:
+                        return 0
+        except (OSError, IOError):
+            return 0
         return 0
 
     def save_high_score(self):
-        with open(HIGH_SCORE_FILE, 'w') as f:
-            f.write(str(self.high_score))
+        try:
+            with open(HIGH_SCORE_FILE, 'w') as f:
+                f.write(str(self.high_score))
+        except (OSError, IOError):
+            pass
 
     def reset(self):
         self.direction = (1, 0)
@@ -171,25 +177,39 @@ class SnakeGame:
         self.screen.blit(high_text, high_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 40)))
         self.screen.blit(prompt, prompt.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80)))
         pygame.display.flip()
-        waiting = True
-        while waiting:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    waiting = False
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                    waiting = False
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                    self.reset()
-                    self.game_loop()
-                    return
-            self.clock.tick(5)
+        while True:
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        return
+                    elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                        return
+                    elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+                        self.reset()
+                        self.game_loop()
+                        waiting = False
+                        break
+                self.clock.tick(5)
+            # After a restart, break out of the outer loop to avoid recursion
+            break
 
     def set_direction(self, key):
-        if key == pygame.K_UP and self.direction != (0, 1):
-            self.direction = (0, -1)
-        elif key == pygame.K_DOWN and self.direction != (0, -1):
-            self.direction = (0, 1)
-        elif key == pygame.K_LEFT and self.direction != (1, 0):
-            self.direction = (-1, 0)
-        elif key == pygame.K_RIGHT and self.direction != (-1, 0):
-            self.direction = (1, 0)
+        # Use set_direction to ensure robust 180-degree turn prevention
+        if key == pygame.K_UP:
+            self.set_direction_internal((0, -1))
+        elif key == pygame.K_DOWN:
+            self.set_direction_internal((0, 1))
+        elif key == pygame.K_LEFT:
+            self.set_direction_internal((-1, 0))
+        elif key == pygame.K_RIGHT:
+            self.set_direction_internal((1, 0))
+
+    def set_direction_internal(self, new_direction):
+        # Use the same logic as GameState for direction setting
+        if not isinstance(new_direction, tuple) or len(new_direction) != 2:
+            return
+        ndx, ndy = new_direction
+        cdx, cdy = self.direction
+        if (ndx, ndy) != (-cdx, -cdy):
+            self.direction = (ndx, ndy)

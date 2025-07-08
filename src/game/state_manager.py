@@ -23,4 +23,22 @@ class GameStateManager:
     def set_direction(self, direction, force=False):
         self.game_state.set_direction(direction, force=force)
 
+    def get_snake_tail(self):
+        return self.game_state.get_snake_tail()
+
+    def get_food(self):
+        return self.game_state.food
+
+    def get_direction(self):
+        return self.game_state.direction
+
+    def get_score(self):
+        return self.game_state.score
+
+    def is_game_over(self):
+        return self.game_state.game_over
+
+    def set_grow(self, value: bool):
+        self.game_state.grow = value
+
     # Add more wrappers as needed for other GameState methods/attributes 

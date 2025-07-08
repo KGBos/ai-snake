@@ -7,12 +7,18 @@ import pygame
 from typing import Optional, Tuple
 from game.models import GameState
 from render.renderer import GameRenderer
+from render.headless import HeadlessRenderer
+from render.web import WebRenderer
+from render.base import BaseRenderer
 from src.ai.rule_based import AIController
 from src.ai.learning import LearningAIController, RewardCalculator, print_game_analysis, log_file_path
 from config.config import HIGH_SCORE_FILE
 from config.loader import load_config
 import logging
 from game.input_handler import InputHandler
+from game.state_manager import GameStateManager
+from ai.manager import AIManager
+from leaderboard_service import LeaderboardService
 
 
 class GameController:
@@ -38,30 +44,25 @@ class GameController:
 
     def __init__(self, speed: int = 10, ai: bool = False, grid: Tuple[int, int] = (20, 20), 
                  nes_mode: bool = False, ai_tracing: bool = False, auto_advance: bool = False,
-                 learning_ai: bool = False, model_path: Optional[str] = None, headless: bool = False, starvation_threshold: Optional[int] = None):
+                 learning_ai: bool = False, model_path: Optional[str] = None, headless: bool = False, web: bool = False, starvation_threshold: Optional[int] = None):
         self.headless = headless
-        if not self.headless:
-            self.clock = pygame.time.Clock()
-        else:
+        self.web = web
+        if self.headless:
+            self.renderer = HeadlessRenderer()
             self.clock = None
-        self.game_state = GameState(grid_width=grid[0], grid_height=grid[1])
-        self.renderer = GameRenderer(nes_mode=nes_mode, headless=headless)
-        self.ai_controller = AIController(enable_tracing=ai_tracing)
-        self.learning_ai_controller = None
-        self.reward_calculator = None
+        elif self.web:
+            self.renderer = WebRenderer()
+            self.clock = None
+        else:
+            self.renderer = GameRenderer(nes_mode=nes_mode, headless=headless)
+            self.clock = pygame.time.Clock()
+        self.state_manager = GameStateManager(grid[0], grid[1])
+        self.ai_manager = AIManager(grid_size=grid, ai_tracing=ai_tracing, learning_ai=learning_ai, model_path=model_path)
         self.model_path = model_path  # Store model_path for info area
         self.starvation_threshold = starvation_threshold if starvation_threshold is not None else 50
         
         # Load config for reward system
-        config = load_config('config/config.yaml')
-        
-        if learning_ai:
-            self.learning_ai_controller = LearningAIController(
-                grid_size=(grid[0], grid[1]), 
-                model_path=model_path,
-                training=True
-            )
-            self.reward_calculator = RewardCalculator(config, starvation_threshold=self.starvation_threshold)
+        config = load_config('src/config/config.yaml')
         
         self.speed = speed
         self.ai = ai
@@ -69,7 +70,7 @@ class GameController:
         self.ai_tracing = ai_tracing
         self.auto_advance = auto_advance
         self.high_score = self.load_high_score()
-        self.game_state.high_score = self.high_score
+        self.state_manager.game_state.high_score = self.high_score
         
         # Training stats
         self.episode_count = self._load_episode_id()  # Persistent episode ID
@@ -81,6 +82,8 @@ class GameController:
         self.death_type = None
         
         self.input_handler = InputHandler(self)
+        self.leaderboard_service = LeaderboardService()
+        self.manual_teaching_mode = False
     
     def load_high_score(self) -> int:
         """Load high score from file."""
@@ -105,112 +108,92 @@ class GameController:
         if self.headless:
             # No rendering, no event handling
             if self.ai:
-                self.ai_controller.make_move(self.game_state)
-            elif self.learning_ai and self.learning_ai_controller:
+                self.ai_manager.make_move(self.state_manager.game_state)
+            elif self.learning_ai:
                 if getattr(self, 'manual_teaching_mode', False):
                     pass
                 else:
-                    direction = self.learning_ai_controller.get_action(self.game_state)
-                    self.game_state.set_direction(direction, force=True)
-            if self.learning_ai and self.learning_ai_controller and self.reward_calculator:
-                reward = self.reward_calculator.calculate_reward(self.game_state, self.game_state.game_over)
+                    direction = self.ai_manager.get_action(self.state_manager.game_state)
+                    if direction is not None:
+                        self.state_manager.game_state.set_direction(direction, force=True)
+            if self.learning_ai and self.ai_manager.learning_ai_controller:
+                reward = self.ai_manager.learning_ai_controller.reward_calculator.calculate_reward(self.state_manager.game_state, self.state_manager.game_state.game_over)
                 # STARVATION DEATH LOGIC
-                if self.reward_calculator.moves_without_food >= self.reward_calculator.starvation_threshold:
-                    self.game_state.game_over = True
-                    self.game_state.death_type = 'starvation'
-                self.learning_ai_controller.record_step(self.game_state, reward, self.game_state.game_over)
+                if self.ai_manager.learning_ai_controller.reward_calculator.moves_without_food >= self.ai_manager.learning_ai_controller.reward_calculator.starvation_threshold:
+                    self.state_manager.game_state.game_over = True
+                    self.state_manager.game_state.death_type = 'starvation'
+                self.ai_manager.record_step(self.state_manager.game_state, reward, self.state_manager.game_state.game_over)
                 self.current_reward = reward
                 if hasattr(self, 'step_count'):
                     self.step_count += 1
                 else:
                     self.step_count = 1
-            old_head = self.game_state.get_snake_head()
-            self.game_state.move_snake()
-            new_head = self.game_state.get_snake_head()
+            old_head = self.state_manager.game_state.get_snake_head()
+            self.state_manager.move_snake()
+            new_head = self.state_manager.game_state.get_snake_head()
             current_time = 0
-            self.game_state.check_collision(current_time)
+            self.state_manager.game_state.check_collision(current_time)
             # Set death type for wall/self collision
-            if self.game_state.game_over and self.death_type is None:
-                if not (0 <= new_head[0] < self.game_state.grid_width and 0 <= new_head[1] < self.game_state.grid_height):
+            if self.state_manager.game_state.game_over and self.death_type is None:
+                if not (0 <= new_head[0] < self.state_manager.game_state.grid_width and 0 <= new_head[1] < self.state_manager.game_state.grid_height):
                     self.death_type = 'wall'
-                elif (new_head in list(self.game_state.snake)[1:]):
+                elif (new_head in list(self.state_manager.game_state.snake)[1:]):
                     self.death_type = 'self'
                 else:
                     self.death_type = 'other'
-            if self.game_state.score > getattr(self, 'high_score', 0):
-                self.high_score = self.game_state.score
-                self.game_state.high_score = self.high_score
+            if self.state_manager.game_state.score > getattr(self, 'high_score', 0):
+                self.high_score = self.state_manager.game_state.score
+                self.state_manager.game_state.high_score = self.high_score
         else:
             if self.ai:
                 logging.debug('Rule-based AI making move.')
-                self.ai_controller.make_move(self.game_state)
-            elif self.learning_ai and self.learning_ai_controller:
+                self.ai_manager.make_move(self.state_manager.game_state)
+            elif self.learning_ai:
                 # Check if in manual teaching mode
                 if getattr(self, 'manual_teaching_mode', False):
                     # Manual input overrides AI in teaching mode
                     logging.debug('Manual teaching mode - AI disabled for manual input')
                 else:
                     logging.debug('Learning AI making move.')
-                    direction = self.learning_ai_controller.get_action(self.game_state)
-                    self.game_state.set_direction(direction, force=True)
-            
+                    direction = self.ai_manager.get_action(self.state_manager.game_state)
+                    if direction is not None:
+                        self.state_manager.game_state.set_direction(direction, force=True)
             # Store state before move for learning
-            if self.learning_ai and self.learning_ai_controller:
-                old_score = self.game_state.score
-            
-            old_head = self.game_state.get_snake_head()
-            self.game_state.move_snake()
-            new_head = self.game_state.get_snake_head()
-            logging.debug(f'Snake moved from {old_head} to {new_head} in direction {self.game_state.direction}')
+            if self.learning_ai:
+                old_score = self.state_manager.game_state.score
+            old_head = self.state_manager.game_state.get_snake_head()
+            self.state_manager.move_snake()
+            new_head = self.state_manager.game_state.get_snake_head()
+            logging.debug(f'Snake moved from {old_head} to {new_head} in direction {self.state_manager.game_state.direction}')
             current_time = pygame.time.get_ticks()
-            
-            self.game_state.check_collision(current_time)
-            
+            self.state_manager.game_state.check_collision(current_time)
             # Record AI events after collision detection
             if self.ai:
-                self.ai_controller.check_food_eaten(self.game_state)
-            
+                self.ai_manager.check_food_eaten(self.state_manager.game_state)
             # Record learning step (even during manual teaching)
-            if self.learning_ai and self.learning_ai_controller and self.reward_calculator:
-                reward = self.reward_calculator.calculate_reward(self.game_state, self.game_state.game_over)
+            if self.learning_ai and self.ai_manager.learning_ai_controller:
+                reward = self.ai_manager.learning_ai_controller.reward_calculator.calculate_reward(self.state_manager.game_state, self.state_manager.game_state.game_over)
                 # STARVATION DEATH LOGIC
-                if self.reward_calculator.moves_without_food >= self.reward_calculator.starvation_threshold:
-                    self.game_state.game_over = True
-                    self.game_state.death_type = 'starvation'
-                self.learning_ai_controller.record_step(self.game_state, reward, self.game_state.game_over)
+                if self.ai_manager.learning_ai_controller.reward_calculator.moves_without_food >= self.ai_manager.learning_ai_controller.reward_calculator.starvation_threshold:
+                    self.state_manager.game_state.game_over = True
+                    self.state_manager.game_state.death_type = 'starvation'
+                self.ai_manager.record_step(self.state_manager.game_state, reward, self.state_manager.game_state.game_over)
                 # Store current reward for display
                 self.current_reward = reward
-                
                 # Track step count for episode statistics
                 if hasattr(self, 'step_count'):
                     self.step_count += 1
                 else:
                     self.step_count = 1
-                
-                # Removed per-turn learning progress output - only log per episode now
-            
             # Update high score if needed
-            if self.game_state.score > self.high_score:
-                self.high_score = self.game_state.score
-                self.game_state.high_score = self.high_score
+            if self.state_manager.game_state.score > self.high_score:
+                self.high_score = self.state_manager.game_state.score
+                self.state_manager.game_state.high_score = self.high_score
                 logging.info(f'New high score: {self.high_score}')
-            
             # Use death_type from GameState (set during collision detection)
-            if self.game_state.game_over and self.game_state.death_type is None:
-                self.game_state.death_type = 'other'  # Fallback for unknown causes
+            if self.state_manager.game_state.game_over and self.state_manager.game_state.death_type is None:
+                self.state_manager.game_state.death_type = 'other'  # Fallback for unknown causes
         
-        # Add to leaderboard if learning AI
-        if self.learning_ai and self.learning_ai_controller:
-            # Get the reward for the just-finished episode
-            if self.learning_ai_controller.agent.episode_rewards:
-                last_reward = self.learning_ai_controller.agent.episode_rewards[-1]
-            else:
-                last_reward = 0
-            death_type = str(self.game_state.death_type) if self.game_state.death_type else "other"
-            # Determine if this episode set a new high score
-            high_score_flag = self.game_state.score == self.high_score
-            self.renderer.leaderboard.add_entry(self.episode_count, last_reward, death_type, high_score=high_score_flag)
-    
     def render(self):
         """Render the current game state."""
         if self.headless:
@@ -218,19 +201,20 @@ class GameController:
         current_time = pygame.time.get_ticks()
         # Build info dict for the info area
         info = {
-            'score': self.game_state.score,
+            'score': self.state_manager.game_state.score,
             'high_score': self.high_score,
             'speed': self.speed,
         }
         # Determine mode and model
-        if self.learning_ai and self.learning_ai_controller:
+        if self.learning_ai:
             info['mode'] = 'Learning AI'
             if self.model_path:
                 info['model'] = self.model_path
             # Add learning stats (always show, even before first death)
-            stats = self.learning_ai_controller.get_stats()
-            episode_rewards = self.learning_ai_controller.agent.episode_rewards
-            
+            stats = self.ai_manager.get_stats()
+            episode_rewards = []
+            if self.ai_manager.learning_ai_controller is not None:
+                episode_rewards = self.ai_manager.learning_ai_controller.agent.episode_rewards
             # Always show basic stats
             info['deaths'] = self.episode_count
             info['episode'] = self.episode_count
@@ -238,7 +222,6 @@ class GameController:
             info['memory_size'] = stats.get('memory_size', 0)
             info['training_step'] = stats.get('training_step', 0)
             info['exploration_rate'] = f"{stats.get('epsilon', 1.0):.1%}"
-            
             # Add episode progress indicator
             if episode_rewards:
                 info['episode_progress'] = f"Episode {self.episode_count + 1}"
@@ -248,12 +231,13 @@ class GameController:
                 info['episode_progress'] = "Episode 1 (Starting)"
                 info['total_episodes_completed'] = 0
                 info['episode_percentage'] = 0
-            
             # Add real-time learning info
             info['current_reward'] = getattr(self, 'current_reward', 0)
             info['teaching_mode'] = getattr(self, 'manual_teaching_mode', False)
-            info['learning_paused'] = not self.learning_ai_controller.training
-            
+            if self.ai_manager.learning_ai_controller is not None:
+                info['learning_paused'] = not self.ai_manager.learning_ai_controller.training
+            else:
+                info['learning_paused'] = False
             # Performance stats (only if we have data)
             if episode_rewards:
                 info['avg_reward'] = stats.get('avg_reward', 0)
@@ -353,37 +337,43 @@ class GameController:
             'Q: Quit Game',
             '+/-: Speed'
         ]
-        self.renderer.render_game(self.game_state, current_time, info)
+        # Only call GameRenderer methods/attributes if renderer is GameRenderer
+        from render.renderer import GameRenderer
+        if isinstance(self.renderer, GameRenderer):
+            self.renderer.render(self.state_manager.game_state, current_time, info)
+        else:
+            self.renderer.render(self.state_manager.game_state, current_time, info)
     
     def reset(self):
         """Reset the game to initial state."""
         # Record episode end for learning AI
-        if self.learning_ai and self.learning_ai_controller:
-            self.learning_ai_controller.record_episode_end(self.game_state.score, death_type=str(self.game_state.death_type) if self.game_state.death_type else "unknown")
+        if self.learning_ai:
+            self.ai_manager.record_episode_end(self.state_manager.game_state.score, death_type=str(self.state_manager.game_state.death_type) if self.state_manager.game_state.death_type else "unknown")
             # Increment persistent episode ID
             self.episode_count += 1
             self._save_episode_id(self.episode_count)
-            self.total_food_eaten += self.game_state.score // 10  # Assuming 10 points per food
-            if self.reward_calculator:
-                self.reward_calculator.reset()
+            self.total_food_eaten += self.state_manager.game_state.score // 10  # Assuming 10 points per food
+            if self.ai_manager.learning_ai_controller:
+                self.ai_manager.learning_ai_controller.reward_calculator.reset()
             # Get the reward for the just-finished episode
-            if self.learning_ai_controller.agent.episode_rewards:
-                last_reward = self.learning_ai_controller.agent.episode_rewards[-1]
-            else:
-                last_reward = 0
-            death_type = str(self.game_state.death_type) if self.game_state.death_type else "other"
+            last_reward = 0
+            if self.ai_manager.learning_ai_controller and self.ai_manager.learning_ai_controller.agent.episode_rewards:
+                last_reward = self.ai_manager.learning_ai_controller.agent.episode_rewards[-1]
+            death_type = str(self.state_manager.game_state.death_type) if self.state_manager.game_state.death_type else "other"
             # Add to both leaderboards using the persistent episode_count
-            self.renderer.add_leaderboard_entry(self.episode_count, last_reward, death_type)
+            high_score_flag = self.state_manager.game_state.score == self.high_score
+            self.leaderboard_service.add_entry(self.episode_count, last_reward, death_type, high_score=high_score_flag)
             # Auto-save based on config settings
-            config = load_config('config/config.yaml')
+            config = load_config('src/config/config.yaml')
             auto_save_enabled = config['learning'].get('auto_save_enabled', True)
             auto_save_interval = config['learning'].get('auto_save_interval', 1)  # Default to every episode
             auto_save_filename = config['learning'].get('auto_save_filename', 'snake_dqn_model_auto.pth')
             if auto_save_enabled and self.episode_count % auto_save_interval == 0:
-                self.learning_ai_controller.save_model(auto_save_filename)
+                self.ai_manager.save_model(auto_save_filename)
         # Reset step counter for new episode
         self.step_count = 0
-        self.game_state.reset()
+        self.state_manager.game_state.reset()
+        self.death_type = None  # Reset death_type for new episode
     
     def run_game_loop(self) -> bool:
         """Run the main game loop. Returns True if game should continue, False to quit."""
@@ -399,17 +389,16 @@ class GameController:
             # TEST LOG: Confirm headless logger is active
             logging.info('Headless mode logger active. Only [HEADLESS] stats will be shown.')
             # Headless mode: no rendering, no event handling, run as fast as possible
-            while not self.game_state.game_over:
+            while not self.state_manager.game_state.game_over:
                 self.update()
             # Game over - restart immediately
-            if self.game_state.score > self.high_score:
+            if self.state_manager.game_state.score > self.high_score:
                 self.save_high_score()
-            if self.ai and self.ai_tracing:
-                self.ai_controller.print_performance_report()
+            # Remove print_performance_report call (does not exist)
             # --- HEADLESS MODE LOGGING OUTPUT ---
-            if self.learning_ai and self.learning_ai_controller:
+            if self.learning_ai and self.ai_manager.learning_ai_controller is not None:
                 episode_count = self.episode_count
-                episode_rewards = self.learning_ai_controller.agent.episode_rewards
+                episode_rewards = self.ai_manager.learning_ai_controller.agent.episode_rewards
                 if episode_rewards:
                     current_reward = episode_rewards[-1]
                     avg_reward = sum(episode_rewards) / len(episode_rewards)
@@ -425,36 +414,30 @@ class GameController:
             self.reset()
             return self.run_game_loop()
         else:
-            while not self.game_state.game_over:
+            while not self.state_manager.game_state.game_over:
                 for event in pygame.event.get():
                     if not self.input_handler.handle_input(event):
-                        if self.learning_ai and self.learning_ai_controller:
+                        if self.learning_ai:
                             self.print_learning_report()
                         return False
                 self.update()
                 self.render()
                 if not self.headless and self.clock is not None:
                     self.clock.tick(self.speed)
-        
         # Game over - restart immediately
-        if self.game_state.score > self.high_score:
+        if self.state_manager.game_state.score > self.high_score:
             self.save_high_score()
-        
-        # Print AI performance report if tracing is enabled
-        if self.ai and self.ai_tracing:
-            self.ai_controller.print_performance_report()
-        
         # Auto-restart (no game over screen)
         self.reset()
         return self.run_game_loop()
     
     def print_learning_report(self):
         """Print a comprehensive learning analysis report."""
-        if not self.learning_ai_controller:
+        if not self.ai_manager.learning_ai_controller:
             return
         
-        stats = self.learning_ai_controller.get_stats()
-        episode_rewards = self.learning_ai_controller.agent.episode_rewards
+        stats = self.ai_manager.get_stats()
+        episode_rewards = self.ai_manager.learning_ai_controller.agent.episode_rewards
         
         print("\n" + "="*60)
         print("🤖 AI LEARNING REPORT")
@@ -543,7 +526,7 @@ class GameController:
         print("="*60 + "\n")
         
         # Print detailed game analysis if learning AI was used
-        if self.learning_ai and self.learning_ai_controller:
+        if self.learning_ai:
             try:
                 if log_file_path and os.path.exists(log_file_path):
                     print_game_analysis(log_file_path)
@@ -552,28 +535,38 @@ class GameController:
     
     def get_settings(self) -> dict:
         """Get current game settings."""
-        return {
+        from render.renderer import GameRenderer
+        settings = {
             'speed': self.speed,
-            'grid': (self.game_state.grid_width, self.game_state.grid_height),
-            'nes': self.renderer.nes_mode
+            'grid': (self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height),
         }
+        if isinstance(self.renderer, GameRenderer):
+            settings['nes'] = self.renderer.nes_mode
+        else:
+            settings['nes'] = False
+        return settings
     
     def update_settings(self, settings: dict):
         """Update game settings."""
         self.speed = settings.get('speed', self.speed)
-        grid = settings.get('grid', (self.game_state.grid_width, self.game_state.grid_height))
-        self.game_state.grid_width, self.game_state.grid_height = grid
-        self.renderer.set_grid_size(grid[0], grid[1])
-        self.renderer.nes_mode = settings.get('nes', self.renderer.nes_mode)
-        self.renderer.font = self.renderer.font = (self.renderer.font if not self.renderer.nes_mode 
-                                                  else pygame.font.SysFont('Courier', 16, bold=True))
+        grid = settings.get('grid', (self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height))
+        self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height = grid
+        from render.renderer import GameRenderer
+        if isinstance(self.renderer, GameRenderer):
+            self.renderer.set_grid_size(grid[0], grid[1])
+            self.renderer.nes_mode = settings.get('nes', self.renderer.nes_mode)
+            # Only set font if nes_mode is True
+            if self.renderer.nes_mode:
+                self.renderer.font = pygame.font.SysFont('Courier', 16, bold=True)
+            else:
+                self.renderer.font = pygame.font.SysFont('Arial', 24)
     
     def save_model(self, filepath: str = "snake_dqn_model.pth"):
         """Save the learning model."""
-        if self.learning_ai_controller:
-            self.learning_ai_controller.save_model(filepath)
+        if self.ai_manager.learning_ai_controller:
+            self.ai_manager.save_model(filepath)
     
     def load_model(self, filepath: str = "snake_dqn_model.pth"):
         """Load a learning model."""
-        if self.learning_ai_controller:
-            self.learning_ai_controller.load_model(filepath) 
+        if self.ai_manager.learning_ai_controller:
+            self.ai_manager.load_model(filepath) 

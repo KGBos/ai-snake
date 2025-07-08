@@ -58,7 +58,8 @@ class Leaderboard:
                 with open(self.file_path, 'r') as f:
                     data = json.load(f)
                     self.entries = [LeaderboardEntry.from_dict(entry) for entry in data]
-            except (json.JSONDecodeError, KeyError):
+            except (json.JSONDecodeError, KeyError, IOError, OSError) as e:
+                print(f"Error loading leaderboard file: {e}")
                 self.entries = []
         else:
             self.entries = []
@@ -70,8 +71,8 @@ class Leaderboard:
         try:
             with open(self.file_path, 'w') as f:
                 json.dump([entry.to_dict() for entry in self.entries], f, indent=2)
-        except IOError:
-            pass  # Silently fail if we can't save
+        except (IOError, OSError) as e:
+            print(f"Error saving leaderboard file: {e}")
     
     def add_entry(self, episode: int, reward: float, death_type: str, high_score: bool = False) -> bool:
         """Add a new entry and return True if it made the leaderboard."""

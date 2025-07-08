@@ -2,7 +2,7 @@ import pygame
 from .loader import load_config, get_screen_size
 
 # Game constants
-config = load_config('config.yaml')
+config = load_config('src/config/config.yaml')
 SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_size(config)
 BASE_SCREEN_SIZE = SCREEN_WIDTH
 DEFAULT_GRID = (20, 20)

@@ -1,0 +1,12 @@
+from abc import ABC, abstractmethod
+from typing import Optional
+from game.models import GameState
+
+class BaseRenderer(ABC):
+    @abstractmethod
+    def render(self, game_state: GameState, current_time: int, info: Optional[dict] = None):
+        pass
+
+    @abstractmethod
+    def clear_screen(self):
+        pass 

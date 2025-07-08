@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from typing import Tuple, Optional
-from src.models import GameState
+from game.models import GameState
 from src.ai.dqn import DQNAgent
 import logging
 import os
@@ -11,23 +11,27 @@ from src.ai.rule_based import AIController
 # Set up file logging for post-game analysis
 def setup_game_logging():
     """Set up logging to file for post-game analysis."""
-    os.makedirs('logs', exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_filename = f"logs/game_session_{timestamp}.log"
-    # Create a dedicated file logger (not root)
-    logger = logging.getLogger('GameAnalysis')
-    logger.setLevel(logging.INFO)
-    # Remove all handlers first (avoid duplicate logs)
-    logger.handlers = []
-    file_handler = logging.FileHandler(log_filename, mode='w')
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    logger.addHandler(file_handler)
-    logger.propagate = False  # Prevent logs from going to root logger/console
-    logger.info(f"=== GAME SESSION STARTED ===")
-    logger.info(f"Log file: {log_filename}")
-    logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info("=" * 60)
-    return logger, log_filename
+    try:
+        os.makedirs('logs', exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_filename = f"logs/game_session_{timestamp}.log"
+        # Create a dedicated file logger (not root)
+        logger = logging.getLogger('GameAnalysis')
+        logger.setLevel(logging.INFO)
+        # Remove all handlers first (avoid duplicate logs)
+        logger.handlers = []
+        file_handler = logging.FileHandler(log_filename, mode='w')
+        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        logger.addHandler(file_handler)
+        logger.propagate = False  # Prevent logs from going to root logger/console
+        logger.info(f"=== GAME SESSION STARTED ===")
+        logger.info(f"Log file: {log_filename}")
+        logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("=" * 60)
+        return logger, log_filename
+    except (OSError, IOError) as e:
+        print(f"Error setting up game logging: {e}")
+        return logging.getLogger('GameAnalysis'), None
 
 # Global logger for the game session
 game_logger, log_file_path = setup_game_logging()
@@ -43,6 +47,7 @@ class LearningAIController:
         
         # Initialize DQN agent
         self.agent = DQNAgent(device=device)
+        self.reward_calculator = RewardCalculator()
         
         # Load pre-trained model if available
         if model_path:
@@ -100,21 +105,20 @@ class LearningAIController:
         """Record a training step."""
         if not self.training or self.last_state is None:
             return
-        
+        # Prevent recording steps after episode is done
+        if hasattr(self, 'episode_done') and self.episode_done:
+            return
         # Get current state
         current_state = self.agent.get_state_representation(game_state)
-        
         # Track episode statistics
         self.total_reward_this_episode += reward
-        
         # Check if food was eaten
         if game_state.score > getattr(self, 'last_score', 0):
             self.food_eaten_this_episode += 1
-        
         # Check if snake died
         if done:
             self.deaths_this_episode += 1
-        
+            self.episode_done = True
         # Store experience
         self.agent.remember(
             self.last_state, 
@@ -123,24 +127,22 @@ class LearningAIController:
             current_state, 
             done
         )
-        
         # Update episode stats
         self.current_episode_reward += reward
         self.current_episode_length += 1
-        
         # Train the agent every step (more aggressive learning)
         self.agent.replay()
-        
         # Update last state and score
         self.last_state = current_state
         self.last_score = game_state.score
     
     def record_episode_end(self, final_score: int, death_type: Optional[str] = None):
         """Record the end of an episode."""
+        # Always reset episode_done flag
+        self.episode_done = False
         if self.training:
             self.agent.episode_rewards.append(self.current_episode_reward)
             self.agent.episode_lengths.append(self.current_episode_length)
-            
             # Store summary stats for this episode
             self.episode_stats.append({
                 'final_score': final_score,
@@ -152,10 +154,9 @@ class LearningAIController:
                 'epsilon': self.agent.epsilon,
                 'death_type': death_type if death_type else 'unknown'
             })
-            
             # Log a CSV-style summary at the end of each episode
             game_logger.info(f"EPISODE {len(self.episode_stats)},Score={final_score},Length={self.current_episode_length},Reward={self.current_episode_reward:.2f},Food={self.food_eaten_this_episode},Deaths={self.deaths_this_episode},Memory={len(self.agent.memory)},Epsilon={self.agent.epsilon:.3f},DeathType={death_type if death_type else 'unknown'}")
-            
+            # Always reset episode stats
             self.current_episode_reward = 0
             self.current_episode_length = 0
             self.last_state = None
@@ -307,8 +308,7 @@ class RewardCalculator:
             self.reward_breakdown['oscillation_penalty'] = -self.oscillation_penalty
         
         # 8. PATH AVAILABILITY BONUS (bonus if path to food exists)
-        ai = AIController()
-        path_exists = ai.path_exists(current_head, current_food, set(game_state.get_snake_body()[1:]), game_state.grid_width, game_state.grid_height)
+        path_exists = AIController.path_exists_stateless(current_head, current_food, set(game_state.get_snake_body()[1:]), game_state.grid_width, game_state.grid_height)
         if path_exists:
             reward += self.path_efficiency_bonus
             self.reward_breakdown['path_efficiency_bonus'] = self.path_efficiency_bonus
@@ -350,7 +350,6 @@ def analyze_game_log(log_file_path: str) -> dict:
     """Analyze the game log file and return comprehensive statistics."""
     if not os.path.exists(log_file_path):
         return {"error": "Log file not found"}
-    
     analysis = {
         "total_steps": 0,
         "total_episodes": 0,
@@ -364,88 +363,80 @@ def analyze_game_log(log_file_path: str) -> dict:
         "safety_interventions": [],
         "final_stats": {}
     }
-    
-    with open(log_file_path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            
-            # Parse episode end entries (new CSV format)
-            if "EPISODE" in line and "Score=" in line and "," in line:
-                try:
-                    # Extract the CSV part after "INFO - "
-                    if " - INFO - " in line:
-                        csv_part = line.split(" - INFO - ")[1]
-                    else:
-                        csv_part = line
-                    
-                    # Parse: "EPISODE X,Score=X,Length=X,Reward=X,Food=X,Deaths=X,Memory=X,Epsilon=X,DeathType=X"
-                    parts = csv_part.split(",")
-                    
-                    episode_data = {}
-                    for part in parts:
-                        if "=" in part:
-                            key, value = part.split("=")
-                            if key == "Score":
-                                episode_data["final_score"] = int(value)
-                            elif key == "Length":
-                                episode_data["episode_length"] = int(value)
-                            elif key == "Reward":
-                                episode_data["total_reward"] = float(value)
-                            elif key == "Food":
-                                episode_data["food_eaten"] = int(value)
-                            elif key == "Deaths":
-                                episode_data["deaths"] = int(value)
-                            elif key == "Memory":
-                                episode_data["memory_size"] = int(value)
-                            elif key == "Epsilon":
-                                episode_data["epsilon"] = float(value)
-                            elif key == "DeathType":
-                                episode_data["death_type"] = value
-                    
-                    # Extract episode number from "EPISODE X"
-                    episode_part = parts[0]
-                    episode_num = int(episode_part.split("EPISODE")[1].strip())
-                    episode_data["episode_number"] = episode_num
-                    
-                    analysis["episode_details"].append(episode_data)
-                    analysis["total_episodes"] += 1
-                    analysis["total_food_eaten"] += episode_data.get("food_eaten", 0)
-                    analysis["total_deaths"] += episode_data.get("deaths", 0)
-                    
-                except Exception as e:
-                    print(f"Error parsing episode line: {line} - {e}")
+    try:
+        with open(log_file_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
                     continue
-    
-    # Calculate final statistics
-    if analysis["episode_details"]:
-        scores = [ep["final_score"] for ep in analysis["episode_details"]]
-        rewards = [ep["total_reward"] for ep in analysis["episode_details"]]
-        food_per_episode = [ep["food_eaten"] for ep in analysis["episode_details"]]
-        deaths_per_episode = [ep["deaths"] for ep in analysis["episode_details"]]
-        
-        # Count death types
-        death_types = {}
-        for ep in analysis["episode_details"]:
-            death_type = ep.get("death_type", "unknown")
-            death_types[death_type] = death_types.get(death_type, 0) + 1
-        
-        analysis["final_stats"] = {
-            "average_score": sum(scores) / len(scores),
-            "best_score": max(scores),
-            "worst_score": min(scores),
-            "average_reward": sum(rewards) / len(rewards),
-            "best_reward": max(rewards),
-            "worst_reward": min(rewards),
-            "average_food_per_episode": sum(food_per_episode) / len(food_per_episode),
-            "average_deaths_per_episode": sum(deaths_per_episode) / len(deaths_per_episode),
-            "total_episodes": len(analysis["episode_details"]),
-            "learning_progress": "improving" if len(scores) > 1 and scores[-1] > scores[0] else "stable",
-            "death_types": death_types
-        }
-    
-    return analysis
+                # Parse episode end entries (new CSV format)
+                if "EPISODE" in line and "Score=" in line and "," in line:
+                    try:
+                        # Extract the CSV part after "INFO - "
+                        if " - INFO - " in line:
+                            csv_part = line.split(" - INFO - ")[1]
+                        else:
+                            csv_part = line
+                        # Parse: "EPISODE X,Score=X,Length=X,Reward=X,Food=X,Deaths=X,Memory=X,Epsilon=X,DeathType=X"
+                        parts = csv_part.split(",")
+                        episode_data = {}
+                        for part in parts:
+                            if "=" in part:
+                                key, value = part.split("=")
+                                if key == "Score":
+                                    episode_data["final_score"] = int(value)
+                                elif key == "Length":
+                                    episode_data["episode_length"] = int(value)
+                                elif key == "Reward":
+                                    episode_data["total_reward"] = float(value)
+                                elif key == "Food":
+                                    episode_data["food_eaten"] = int(value)
+                                elif key == "Deaths":
+                                    episode_data["deaths"] = int(value)
+                                elif key == "Memory":
+                                    episode_data["memory_size"] = int(value)
+                                elif key == "Epsilon":
+                                    episode_data["epsilon"] = float(value)
+                                elif key == "DeathType":
+                                    episode_data["death_type"] = value
+                        # Extract episode number from "EPISODE X"
+                        episode_part = parts[0]
+                        episode_num = int(episode_part.split("EPISODE")[1].strip())
+                        episode_data["episode_number"] = episode_num
+                        analysis["episode_details"].append(episode_data)
+                        analysis["total_episodes"] += 1
+                        analysis["total_food_eaten"] += episode_data.get("food_eaten", 0)
+                        analysis["total_deaths"] += episode_data.get("deaths", 0)
+                    except Exception as e:
+                        print(f"Error parsing episode line: {line} - {e}")
+                        continue
+        # Calculate final statistics
+        if analysis["episode_details"]:
+            scores = [ep["final_score"] for ep in analysis["episode_details"]]
+            rewards = [ep["total_reward"] for ep in analysis["episode_details"]]
+            food_per_episode = [ep["food_eaten"] for ep in analysis["episode_details"]]
+            deaths_per_episode = [ep["deaths"] for ep in analysis["episode_details"]]
+            # Count death types
+            death_types = {}
+            for ep in analysis["episode_details"]:
+                death_type = ep.get("death_type", "unknown")
+                death_types[death_type] = death_types.get(death_type, 0) + 1
+            analysis["final_stats"] = {
+                "average_score": sum(scores) / len(scores),
+                "best_score": max(scores),
+                "worst_score": min(scores),
+                "average_reward": sum(rewards) / len(rewards),
+                "best_reward": max(rewards),
+                "worst_reward": min(rewards),
+                "average_food_per_episode": sum(food_per_episode) / len(food_per_episode),
+                "average_deaths_per_episode": sum(deaths_per_episode) / len(deaths_per_episode),
+                "total_episodes": len(analysis["episode_details"]),
+                "learning_progress": "improving" if len(scores) > 1 and scores[-1] > scores[0] else "stable",
+                "death_types": death_types
+            }
+        return analysis
+    except (OSError, IOError, ValueError) as e:
+        return {"error": f"Error reading log file: {e}"}
 
 def print_game_analysis(log_file_path: str):
     """Print a comprehensive analysis of the game session."""
