@@ -5,6 +5,7 @@ from datetime import datetime
 from game.models import GameState
 from config.config import *
 from config.loader import *
+import logging
 
 class LeaderboardEntry:
     """Represents a single leaderboard entry."""
@@ -59,7 +60,7 @@ class Leaderboard:
                     data = json.load(f)
                     self.entries = [LeaderboardEntry.from_dict(entry) for entry in data]
             except (json.JSONDecodeError, KeyError, IOError, OSError) as e:
-                print(f"Error loading leaderboard file: {e}")
+                logging.getLogger(__name__).error(f"Error loading leaderboard file: {e}")
                 self.entries = []
         else:
             self.entries = []
@@ -72,7 +73,7 @@ class Leaderboard:
             with open(self.file_path, 'w') as f:
                 json.dump([entry.to_dict() for entry in self.entries], f, indent=2)
         except (IOError, OSError) as e:
-            print(f"Error saving leaderboard file: {e}")
+            logging.getLogger(__name__).error(f"Error saving leaderboard file: {e}")
     
     def add_entry(self, episode: int, reward: float, death_type: str, high_score: bool = False) -> bool:
         """Add a new entry and return True if it made the leaderboard."""

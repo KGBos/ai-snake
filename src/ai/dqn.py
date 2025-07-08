@@ -12,6 +12,8 @@ import logging
 
 Experience = namedtuple('Experience', ['state', 'action', 'reward', 'next_state', 'done'])
 
+logger = logging.getLogger(__name__)
+
 class SimpleSnakeDQN(nn.Module):
     """Simple DQN for Snake game with proper state representation."""
     
@@ -242,7 +244,7 @@ class DQNAgent:
             'episode_rewards': self.episode_rewards,
             'episode_lengths': self.episode_lengths
         }, filepath)
-        logging.info(f"Model saved to {filepath} (epsilon={self.epsilon:.3f}, training_step={self.training_step})")
+        logger.info(f"Model saved to {filepath} (epsilon={self.epsilon:.3f}, training_step={self.training_step})")
     
     def load_model(self, filepath: str):
         """Load a trained model."""
@@ -255,8 +257,7 @@ class DQNAgent:
             self.training_step = checkpoint['training_step']
             self.episode_rewards = checkpoint['episode_rewards']
             self.episode_lengths = checkpoint['episode_lengths']
-            print(f"Loaded model from {filepath}")
-            logging.info(f"Model loaded from {filepath} (epsilon={self.epsilon:.3f}, training_step={self.training_step})")
+            logger.info(f"Loaded model from {filepath} (epsilon={self.epsilon:.3f}, training_step={self.training_step})")
     
     def get_stats(self) -> dict:
         """Get training statistics."""

@@ -1,12 +1,13 @@
 from render.leaderboard import Leaderboard
 from typing import Optional
+import logging
 
 class LeaderboardService:
     def __init__(self, file_path: Optional[str] = "leaderboard.json"):
         try:
             self.leaderboard = Leaderboard(file_path)
         except (IOError, OSError, ValueError, Exception) as e:
-            print(f"Error loading leaderboard file: {e}")
+            logging.getLogger(__name__).error(f"Error loading leaderboard file: {e}")
             self.leaderboard = Leaderboard(file_path=None)
         self.session_leaderboard = Leaderboard(file_path=None)
 

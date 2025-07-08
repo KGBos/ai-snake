@@ -10,8 +10,8 @@ from render.renderer import GameRenderer
 from render.headless import HeadlessRenderer
 from render.web import WebRenderer
 from render.base import BaseRenderer
-from src.ai.rule_based import AIController
-from src.ai.learning import LearningAIController, RewardCalculator, print_game_analysis, log_file_path
+from ai.rule_based import AIController
+from ai.learning import LearningAIController, RewardCalculator, print_game_analysis, log_file_path
 from config.config import HIGH_SCORE_FILE
 from config.loader import load_config
 import logging
@@ -20,6 +20,7 @@ from game.state_manager import GameStateManager
 from ai.manager import AIManager
 from leaderboard_service import LeaderboardService
 
+logger = logging.getLogger(__name__)
 
 class GameController:
     """Manages the game loop and coordinates between game state, AI, and rendering."""
@@ -120,8 +121,7 @@ class GameController:
                 reward = self.ai_manager.learning_ai_controller.reward_calculator.calculate_reward(self.state_manager.game_state, self.state_manager.game_state.game_over)
                 # STARVATION DEATH LOGIC
                 if self.ai_manager.learning_ai_controller.reward_calculator.moves_without_food >= self.ai_manager.learning_ai_controller.reward_calculator.starvation_threshold:
-                    self.state_manager.game_state.game_over = True
-                    self.state_manager.game_state.death_type = 'starvation'
+                    self.state_manager.game_state.set_starvation_death()
                 self.ai_manager.record_step(self.state_manager.game_state, reward, self.state_manager.game_state.game_over)
                 self.current_reward = reward
                 if hasattr(self, 'step_count'):
@@ -135,26 +135,21 @@ class GameController:
             self.state_manager.game_state.check_collision(current_time)
             # Set death type for wall/self collision
             if self.state_manager.game_state.game_over and self.death_type is None:
-                if not (0 <= new_head[0] < self.state_manager.game_state.grid_width and 0 <= new_head[1] < self.state_manager.game_state.grid_height):
-                    self.death_type = 'wall'
-                elif (new_head in list(self.state_manager.game_state.snake)[1:]):
-                    self.death_type = 'self'
-                else:
-                    self.death_type = 'other'
+                self.state_manager.game_state.set_other_death()
             if self.state_manager.game_state.score > getattr(self, 'high_score', 0):
                 self.high_score = self.state_manager.game_state.score
                 self.state_manager.game_state.high_score = self.high_score
         else:
             if self.ai:
-                logging.debug('Rule-based AI making move.')
+                logger.debug('Rule-based AI making move.')
                 self.ai_manager.make_move(self.state_manager.game_state)
             elif self.learning_ai:
                 # Check if in manual teaching mode
                 if getattr(self, 'manual_teaching_mode', False):
                     # Manual input overrides AI in teaching mode
-                    logging.debug('Manual teaching mode - AI disabled for manual input')
+                    logger.debug('Manual teaching mode - AI disabled for manual input')
                 else:
-                    logging.debug('Learning AI making move.')
+                    logger.debug('Learning AI making move.')
                     direction = self.ai_manager.get_action(self.state_manager.game_state)
                     if direction is not None:
                         self.state_manager.game_state.set_direction(direction, force=True)
@@ -164,7 +159,7 @@ class GameController:
             old_head = self.state_manager.game_state.get_snake_head()
             self.state_manager.move_snake()
             new_head = self.state_manager.game_state.get_snake_head()
-            logging.debug(f'Snake moved from {old_head} to {new_head} in direction {self.state_manager.game_state.direction}')
+            logger.debug(f'Snake moved from {old_head} to {new_head} in direction {self.state_manager.game_state.direction}')
             current_time = pygame.time.get_ticks()
             self.state_manager.game_state.check_collision(current_time)
             # Record AI events after collision detection
@@ -175,8 +170,7 @@ class GameController:
                 reward = self.ai_manager.learning_ai_controller.reward_calculator.calculate_reward(self.state_manager.game_state, self.state_manager.game_state.game_over)
                 # STARVATION DEATH LOGIC
                 if self.ai_manager.learning_ai_controller.reward_calculator.moves_without_food >= self.ai_manager.learning_ai_controller.reward_calculator.starvation_threshold:
-                    self.state_manager.game_state.game_over = True
-                    self.state_manager.game_state.death_type = 'starvation'
+                    self.state_manager.game_state.set_starvation_death()
                 self.ai_manager.record_step(self.state_manager.game_state, reward, self.state_manager.game_state.game_over)
                 # Store current reward for display
                 self.current_reward = reward
@@ -189,10 +183,10 @@ class GameController:
             if self.state_manager.game_state.score > self.high_score:
                 self.high_score = self.state_manager.game_state.score
                 self.state_manager.game_state.high_score = self.high_score
-                logging.info(f'New high score: {self.high_score}')
+                logger.info(f'New high score: {self.high_score}')
             # Use death_type from GameState (set during collision detection)
             if self.state_manager.game_state.game_over and self.state_manager.game_state.death_type is None:
-                self.state_manager.game_state.death_type = 'other'  # Fallback for unknown causes
+                self.state_manager.game_state.set_other_death()
         
     def render(self):
         """Render the current game state."""
@@ -387,7 +381,7 @@ class GameController:
             root_logger.addHandler(console_handler)
             root_logger.setLevel(logging.INFO)
             # TEST LOG: Confirm headless logger is active
-            logging.info('Headless mode logger active. Only [HEADLESS] stats will be shown.')
+            logger.info('Headless mode logger active. Only [HEADLESS] stats will be shown.')
             # Headless mode: no rendering, no event handling, run as fast as possible
             while not self.state_manager.game_state.game_over:
                 self.update()
@@ -410,7 +404,7 @@ class GameController:
                 highlight = ''
                 if current_reward == top_reward and len(episode_rewards) > 1:
                     highlight = ' *** NEW HIGH SCORE! ***'
-                logging.info(f"Episode: {episode_count} | Current reward: {current_reward:.2f} | Avg reward: {avg_reward:.2f} | High: {top_reward:.2f}{highlight}")
+                logger.info(f"Episode: {episode_count} | Current reward: {current_reward:.2f} | Avg reward: {avg_reward:.2f} | High: {top_reward:.2f}{highlight}")
             self.reset()
             return self.run_game_loop()
         else:

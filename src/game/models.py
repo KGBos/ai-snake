@@ -122,4 +122,19 @@ class GameState:
     
     def set_snake_for_testing(self, snake_body: list):
         """Set the snake body for testing purposes."""
-        self.snake = deque(snake_body) 
+        self.snake = deque(snake_body)
+
+    def set_starvation_death(self):
+        """Set the game over state and death type for starvation."""
+        self.game_over = True
+        self.death_type = 'starvation'
+
+    def set_death_type(self, death_type: str):
+        """Set the game over state and death type for a custom reason."""
+        self.game_over = True
+        self.death_type = death_type
+
+    def set_other_death(self):
+        """Set the game over state and death type as 'other' for unknown causes."""
+        self.game_over = True
+        self.death_type = 'other' 

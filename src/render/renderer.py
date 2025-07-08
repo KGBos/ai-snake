@@ -10,6 +10,7 @@ from config.loader import load_config, get_grid_padding, get_panel_padding, get_
 from render.leaderboard import Leaderboard
 from render.base import BaseRenderer
 
+logger = logging.getLogger(__name__)
 
 class GameRenderer(BaseRenderer):
     """Handles all rendering logic for the snake game with three-panel layout."""
@@ -108,8 +109,8 @@ class GameRenderer(BaseRenderer):
         
         self.grid_origin = (origin_x, origin_y)
         
-        logging.info(f"Three-panel layout: Left={self.left_panel_width}, Game={self.game_area_width}, Right={self.right_panel_width}")
-        logging.info(f"Grid: {grid_width}x{grid_height}, Cell size: {self.cell_size}, Origin: {self.grid_origin}")
+        logger.info(f"Three-panel layout: Left={self.left_panel_width}, Game={self.game_area_width}, Right={self.right_panel_width}")
+        logger.info(f"Grid: {grid_width}x{grid_height}, Cell size: {self.cell_size}, Origin: {self.grid_origin}")
     
     def draw_cell(self, pos: Tuple[int, int], color: Tuple[int, int, int]):
         """Draw a single cell at the given position."""

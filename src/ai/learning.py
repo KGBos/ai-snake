@@ -2,39 +2,42 @@ import torch
 import numpy as np
 from typing import Tuple, Optional
 from game.models import GameState
-from src.ai.dqn import DQNAgent
+from ai.dqn import DQNAgent
 import logging
 import os
 from datetime import datetime
-from src.ai.rule_based import AIController
+from ai.rule_based import AIController
+import json
+from src.utils.logging_utils import setup_logging
 
 # Set up file logging for post-game analysis
-def setup_game_logging():
-    """Set up logging to file for post-game analysis."""
-    try:
-        os.makedirs('logs', exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f"logs/game_session_{timestamp}.log"
-        # Create a dedicated file logger (not root)
-        logger = logging.getLogger('GameAnalysis')
-        logger.setLevel(logging.INFO)
-        # Remove all handlers first (avoid duplicate logs)
-        logger.handlers = []
-        file_handler = logging.FileHandler(log_filename, mode='w')
-        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        logger.addHandler(file_handler)
-        logger.propagate = False  # Prevent logs from going to root logger/console
-        logger.info(f"=== GAME SESSION STARTED ===")
-        logger.info(f"Log file: {log_filename}")
-        logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info("=" * 60)
-        return logger, log_filename
-    except (OSError, IOError) as e:
-        print(f"Error setting up game logging: {e}")
-        return logging.getLogger('GameAnalysis'), None
+def setup_game_logging(json_mode=False):
+    """Set up logging to file for post-game analysis using centralized utility."""
+    logger = setup_logging(log_to_file=True, log_to_console=False, log_level='INFO', log_name='game_session', json_mode=json_mode)
+    log_dir = 'logs'
+    # Find the most recent log file
+    import glob
+    log_files = glob.glob(os.path.join(log_dir, 'game_session_*.log'))
+    log_filename = max(log_files, key=os.path.getmtime) if log_files else None
+    logger = logging.getLogger('GameAnalysis')
+    logger.setLevel(logging.INFO)
+    logger.propagate = True  # Use root handlers
+    logger.info(f"=== GAME SESSION STARTED ===")
+    logger.info(f"Log file: {log_filename}")
+    logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 60)
+    return logger, log_filename
 
 # Global logger for the game session
-game_logger, log_file_path = setup_game_logging()
+import sys
+def is_json_mode():
+    # Check if the root logger uses JsonFormatter
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        if handler.formatter and handler.formatter.__class__.__name__ == 'JsonFormatter':
+            return True
+    return False
+game_logger, log_file_path = setup_game_logging(json_mode=is_json_mode())
 
 class LearningAIController:
     """Learning AI controller that uses DQN to make decisions."""
@@ -144,7 +147,8 @@ class LearningAIController:
             self.agent.episode_rewards.append(self.current_episode_reward)
             self.agent.episode_lengths.append(self.current_episode_length)
             # Store summary stats for this episode
-            self.episode_stats.append({
+            episode_data = {
+                'event': 'episode_end',
                 'final_score': final_score,
                 'episode_length': self.current_episode_length,
                 'total_reward': self.current_episode_reward,
@@ -153,9 +157,15 @@ class LearningAIController:
                 'memory_size': len(self.agent.memory),
                 'epsilon': self.agent.epsilon,
                 'death_type': death_type if death_type else 'unknown'
-            })
+            }
+            self.episode_stats.append(episode_data)
             # Log a CSV-style summary at the end of each episode
             game_logger.info(f"EPISODE {len(self.episode_stats)},Score={final_score},Length={self.current_episode_length},Reward={self.current_episode_reward:.2f},Food={self.food_eaten_this_episode},Deaths={self.deaths_this_episode},Memory={len(self.agent.memory)},Epsilon={self.agent.epsilon:.3f},DeathType={death_type if death_type else 'unknown'}")
+            # Log a JSON-structured entry for agent analysis
+            try:
+                game_logger.info(json.dumps(episode_data))
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Failed to log JSON episode data: {e}")
             # Always reset episode stats
             self.current_episode_reward = 0
             self.current_episode_length = 0
@@ -408,7 +418,7 @@ def analyze_game_log(log_file_path: str) -> dict:
                         analysis["total_food_eaten"] += episode_data.get("food_eaten", 0)
                         analysis["total_deaths"] += episode_data.get("deaths", 0)
                     except Exception as e:
-                        print(f"Error parsing episode line: {line} - {e}")
+                        logging.getLogger(__name__).warning(f"Error parsing episode line: {line} - {e}")
                         continue
         # Calculate final statistics
         if analysis["episode_details"]:
@@ -443,60 +453,58 @@ def print_game_analysis(log_file_path: str):
     analysis = analyze_game_log(log_file_path)
     
     if "error" in analysis:
-        print(f"Error analyzing log: {analysis['error']}")
+        logging.getLogger(__name__).error(f"Error analyzing log: {analysis['error']}")
         return
     
-    print("\n" + "="*80)
-    print("🎮 GAME SESSION ANALYSIS")
-    print("="*80)
+    logging.getLogger(__name__).info("\n" + "="*80)
+    logging.getLogger(__name__).info("🎮 GAME SESSION ANALYSIS")
+    logging.getLogger(__name__).info("="*80)
     
-    print(f"📊 OVERALL STATISTICS:")
-    print(f"   Total Steps: {analysis['total_steps']:,}")
-    print(f"   Total Episodes: {analysis['total_episodes']}")
-    print(f"   Total Food Eaten: {analysis['total_food_eaten']}")
-    print(f"   Total Deaths: {analysis['total_deaths']}")
-    print(f"   Total Safety Interventions: {analysis['total_safety_interventions']}")
+    logging.getLogger(__name__).info(f"📊 OVERALL STATISTICS:")
+    logging.getLogger(__name__).info(f"   Total Steps: {analysis['total_steps']:,}")
+    logging.getLogger(__name__).info(f"   Total Episodes: {analysis['total_episodes']}")
+    logging.getLogger(__name__).info(f"   Total Food Eaten: {analysis['total_food_eaten']}")
+    logging.getLogger(__name__).info(f"   Total Deaths: {analysis['total_deaths']}")
+    logging.getLogger(__name__).info(f"   Total Safety Interventions: {analysis['total_safety_interventions']}")
     
     if analysis["final_stats"]:
         stats = analysis["final_stats"]
-        print(f"\n📈 PERFORMANCE ANALYSIS:")
-        print(f"   Average Score: {stats['average_score']:.2f}")
-        print(f"   Best Score: {stats['best_score']}")
-        print(f"   Worst Score: {stats['worst_score']}")
-        print(f"   Average Reward: {stats['average_reward']:.2f}")
-        print(f"   Best Reward: {stats['best_reward']:.2f}")
-        print(f"   Average Food per Episode: {stats['average_food_per_episode']:.2f}")
-        print(f"   Average Deaths per Episode: {stats['average_deaths_per_episode']:.2f}")
-        print(f"   Learning Progress: {stats['learning_progress'].upper()}")
+        logging.getLogger(__name__).info(f"\n📈 PERFORMANCE ANALYSIS:")
+        logging.getLogger(__name__).info(f"   Average Score: {stats['average_score']:.2f}")
+        logging.getLogger(__name__).info(f"   Best Score: {stats['best_score']}")
+        logging.getLogger(__name__).info(f"   Worst Score: {stats['worst_score']}")
+        logging.getLogger(__name__).info(f"   Average Reward: {stats['average_reward']:.2f}")
+        logging.getLogger(__name__).info(f"   Best Reward: {stats['best_reward']:.2f}")
+        logging.getLogger(__name__).info(f"   Average Food per Episode: {stats['average_food_per_episode']:.2f}")
+        logging.getLogger(__name__).info(f"   Average Deaths per Episode: {stats['average_deaths_per_episode']:.2f}")
+        logging.getLogger(__name__).info(f"   Learning Progress: {stats['learning_progress'].upper()}")
         
         # Display death type breakdown
         if 'death_types' in stats:
-            print(f"\n💀 DEATH TYPE BREAKDOWN:")
+            logging.getLogger(__name__).info(f"\n💀 DEATH TYPE BREAKDOWN:")
             total_episodes = stats['total_episodes']
             for death_type, count in sorted(stats['death_types'].items(), key=lambda x: x[1], reverse=True):
                 percentage = (count / total_episodes * 100) if total_episodes > 0 else 0
-                print(f"   {death_type.capitalize()}: {count} episodes ({percentage:.1f}%)")
+                logging.getLogger(__name__).info(f"   {death_type.capitalize()}: {count} episodes ({percentage:.1f}%)")
     
     if analysis["action_distribution"]:
-        print(f"\n🎯 ACTION DISTRIBUTION:")
+        logging.getLogger(__name__).info(f"\n🎯 ACTION DISTRIBUTION:")
         total_actions = sum(analysis["action_distribution"].values())
         action_names = {0: "UP", 1: "DOWN", 2: "LEFT", 3: "RIGHT"}
         for action, count in sorted(analysis["action_distribution"].items()):
             percentage = (count / total_actions * 100) if total_actions > 0 else 0
-            print(f"   {action_names.get(action, f'Action_{action}')}: {count} ({percentage:.1f}%)")
+            logging.getLogger(__name__).info(f"   {action_names.get(action, f'Action_{action}')}: {count} ({percentage:.1f}%)")
     
     if analysis["episode_details"]:
-        print(f"\n📋 EPISODE DETAILS:")
+        logging.getLogger(__name__).info(f"\n📋 EPISODE DETAILS:")
         for i, episode in enumerate(analysis["episode_details"][-5:], 1):  # Show last 5 episodes
-            print(f"   Episode {episode['episode_number']}: Score={episode['final_score']}, "
-                  f"Food={episode['food_eaten']}, Deaths={episode['deaths']}, "
-                  f"Reward={episode['total_reward']:.2f}")
+            logging.getLogger(__name__).info(f"   Episode {episode['episode_number']}: Score={episode['final_score']}, Food={episode['food_eaten']}, Deaths={episode['deaths']}, Reward={episode['total_reward']:.2f}")
     
     if analysis["safety_interventions"]:
-        print(f"\n🛡️ RECENT SAFETY INTERVENTIONS:")
+        logging.getLogger(__name__).info(f"\n🛡️ RECENT SAFETY INTERVENTIONS:")
         for intervention in analysis["safety_interventions"][-3:]:  # Show last 3
-            print(f"   {intervention}")
+            logging.getLogger(__name__).info(f"   {intervention}")
     
-    print("="*80)
-    print(f"📄 Full log available at: {log_file_path}")
-    print("="*80) 
+    logging.getLogger(__name__).info("="*80)
+    logging.getLogger(__name__).info(f"📄 Full log available at: {log_file_path}")
+    logging.getLogger(__name__).info("="*80) 

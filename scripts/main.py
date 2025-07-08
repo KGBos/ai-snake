@@ -2,12 +2,14 @@ import sys
 import argparse
 import os
 import logging
+from src.utils.logging_utils import setup_logging
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pygame
 from src.game_controller import GameController
 from src.config.loader import load_config, get_grid_size, get_game_speed, get_nes_mode, get_auto_advance, get_ai_tracing, get_model_path
 
+logger = logging.getLogger(__name__)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="AI Snake Game Launcher")
@@ -51,17 +53,16 @@ def play_game(args):
     
     # Set up logging level based on verbose flag
     if args.verbose:
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-        print("🔍 VERBOSE LOGGING ENABLED - You'll see detailed RL progress in real-time!")
-        print("📊 Watch for:")
-        print("   🎯 Food rewards when snake eats")
-        print("   💀 Death penalties when snake dies")
-        print("   📏 Distance rewards/penalties")
-        print("   ⚡ Efficiency bonuses")
-        print("   🔄 Oscillation penalties")
-        print("   🛡️ Safety interventions")
-        print("   📈 Learning progress updates")
-        print("=" * 60)
+        logger.info("🔍 VERBOSE LOGGING ENABLED - You'll see detailed RL progress in real-time!")
+        logger.info("📊 Watch for:")
+        logger.info("   🎯 Food rewards when snake eats")
+        logger.info("   💀 Death penalties when snake dies")
+        logger.info("   📏 Distance rewards/penalties")
+        logger.info("   ⚡ Efficiency bonuses")
+        logger.info("   🔄 Oscillation penalties")
+        logger.info("   🛡️ Safety interventions")
+        logger.info("   📈 Learning progress updates")
+        logger.info("=" * 60)
     
     # Use command line args if provided, otherwise use config
     grid = tuple(args.grid) if args.grid else get_grid_size(config)
@@ -93,10 +94,10 @@ def play_game(args):
     
     # Enable verbose logging for learning AI
     if args.verbose and args.learning:
-        print("🤖 LEARNING AI MODE WITH VERBOSE LOGGING")
-        print("Watch the console for detailed RL progress!")
-        print("Press Q to quit and see final learning report")
-        print("=" * 60)
+        logger.info("🤖 LEARNING AI MODE WITH VERBOSE LOGGING")
+        logger.info("Watch the console for detailed RL progress!")
+        logger.info("Press Q to quit and see final learning report")
+        logger.info("=" * 60)
     
     game.run_game_loop()
     pygame.quit()
@@ -107,6 +108,7 @@ def test_model(args):
     test_path = os.path.join(os.path.dirname(__file__), '../testing/test_ai_performance.py')
     spec = importlib.util.spec_from_file_location('test_ai_performance', test_path)
     if spec is None or spec.loader is None:
+        logger.error('Could not load test_ai_performance.py for model testing.')
         print('Could not load test_ai_performance.py for model testing.')
         sys.exit(1)
     test_module = importlib.util.module_from_spec(spec)
@@ -128,14 +130,17 @@ def test_model(args):
 
 def main():
     args = parse_args()
-    if getattr(args, 'debug', False):
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
-        logging.debug('Debug logging enabled.')
+    # Setup centralized logging
+    log_level = 'DEBUG' if getattr(args, 'debug', False) else 'INFO'
+    json_mode = False  # Could add a CLI flag for this if desired
+    setup_logging(log_to_file=True, log_to_console=True, log_level=log_level, json_mode=json_mode)
+    logger.debug('Centralized logging enabled.')
     if args.command == 'play':
         play_game(args)
     elif args.command == 'test-model':
         test_model(args)
     else:
+        logger.warning('Please specify a subcommand. Use --help for options.')
         print('Please specify a subcommand. Use --help for options.')
 
 if __name__ == '__main__':
