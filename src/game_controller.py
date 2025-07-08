@@ -445,6 +445,8 @@ class GameController:
     def run_game_loop(self) -> bool:
         """Run the main game loop. Returns True if game should continue, False to quit."""
         if self.headless:
+            # Configure logging to console for headless mode
+            logging.basicConfig(level=logging.INFO, format='[HEADLESS] %(message)s')
             # Headless mode: no rendering, no event handling, run as fast as possible
             while not self.game_state.game_over:
                 self.update()
@@ -453,6 +455,22 @@ class GameController:
                 self.save_high_score()
             if self.ai and self.ai_tracing:
                 self.ai_controller.print_performance_report()
+            # --- HEADLESS MODE LOGGING OUTPUT ---
+            if self.learning_ai and self.learning_ai_controller:
+                episode_count = self.episode_count
+                episode_rewards = self.learning_ai_controller.agent.episode_rewards
+                if episode_rewards:
+                    current_reward = episode_rewards[-1]
+                    avg_reward = sum(episode_rewards) / len(episode_rewards)
+                    top_reward = max(episode_rewards)
+                else:
+                    current_reward = 0
+                    avg_reward = 0
+                    top_reward = 0
+                highlight = ''
+                if current_reward == top_reward and len(episode_rewards) > 1:
+                    highlight = ' *** NEW HIGH SCORE! ***'
+                logging.info(f"Episode: {episode_count} | Current reward: {current_reward:.2f} | Avg reward: {avg_reward:.2f} | High: {top_reward:.2f}{highlight}")
             self.reset()
             return self.run_game_loop()
         else:
