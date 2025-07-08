@@ -1,0 +1,92 @@
+[
+  {
+    "episode": 1322,
+    "reward": 817.8380000000003,
+    "death_type": "self",
+    "timestamp": 1751955118.914459,
+    "previous_rank": 1,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1286,
+    "reward": 590.6600000000001,
+    "death_type": "self",
+    "timestamp": 1751955109.02914,
+    "previous_rank": 2,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1338,
+    "reward": 547.5290000000001,
+    "death_type": "self",
+    "timestamp": 1751955123.42606,
+    "previous_rank": 3,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1465,
+    "reward": 529.0489999999999,
+    "death_type": "wall",
+    "timestamp": 1751955158.287462,
+    "previous_rank": 4,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1462,
+    "reward": 489.4549999999999,
+    "death_type": "wall",
+    "timestamp": 1751955157.21506,
+    "previous_rank": 5,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1311,
+    "reward": 486.73400000000026,
+    "death_type": "self",
+    "timestamp": 1751955114.965528,
+    "previous_rank": 6,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1330,
+    "reward": 480.15700000000004,
+    "death_type": "self",
+    "timestamp": 1751955120.66666,
+    "previous_rank": 7,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1308,
+    "reward": 472.45899999999995,
+    "death_type": "self",
+    "timestamp": 1751955113.930843,
+    "previous_rank": 8,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1360,
+    "reward": 466.9409999999999,
+    "death_type": "self",
+    "timestamp": 1751955130.062812,
+    "previous_rank": 9,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 1306,
+    "reward": 462.96099999999996,
+    "death_type": "wall",
+    "timestamp": 1751955113.400062,
+    "previous_rank": 10,
+    "rank_change": 0,
+    "high_score": false
+  }
+]

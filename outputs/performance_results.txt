@@ -1,0 +1,4 @@
+Game 1: Score=0, Food=0, Length=1
+Game 2: Score=0, Food=0, Length=1
+Game 3: Score=0, Food=0, Length=1
+Game 4: Score=0, Food=0, Length=1

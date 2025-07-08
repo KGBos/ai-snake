@@ -1,0 +1,9 @@
+testing:
+  games: 5
+  speed: 100
+  grid_size: [10, 10]
+  episodes: 3
+  model: models/best_snake_ai.pth
+  compare: false
+  visual: false
+  auto_advance: true 
