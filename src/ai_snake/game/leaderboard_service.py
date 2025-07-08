@@ -1,4 +1,4 @@
-from render.leaderboard import Leaderboard
+from ai_snake.render.leaderboard import Leaderboard
 from typing import Optional
 import logging
 

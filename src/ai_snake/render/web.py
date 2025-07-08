@@ -1,5 +1,5 @@
-from render.base import BaseRenderer
-from game.models import GameState
+from ai_snake.render.base import BaseRenderer
+from ai_snake.game.models import GameState
 from typing import Optional
 from flask import Flask, jsonify
 import threading

@@ -2,19 +2,19 @@ import sys
 import argparse
 import os
 import logging
-from src.utils.logging_utils import setup_logging
+from ai_snake.utils.logging_utils import setup_logging
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pygame
-from src.game_controller import GameController
-from src.config.loader import load_config, get_grid_size, get_game_speed, get_nes_mode, get_auto_advance, get_ai_tracing, get_model_path
+from ai_snake.game.game_controller import GameController
+from ai_snake.config.loader import load_config, get_grid_size, get_game_speed, get_nes_mode, get_auto_advance, get_ai_tracing, get_model_path
 
 logger = logging.getLogger(__name__)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="AI Snake Game Launcher")
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
-    parser.add_argument('--config', type=str, default='src/config/config.yaml', help='Path to config file')
+    parser.add_argument('--config', type=str, default='config/config.yaml', help='Path to config file')
     subparsers = parser.add_subparsers(dest='command', help='Sub-commands')
 
     # Play subcommand

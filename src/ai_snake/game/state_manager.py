@@ -1,4 +1,4 @@
-from game.models import GameState
+from ai_snake.game.models import GameState
 import pygame
 
 class GameStateManager:

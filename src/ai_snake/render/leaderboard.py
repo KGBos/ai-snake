@@ -2,9 +2,9 @@ import json
 import os
 from typing import List, Dict, Optional, Tuple, Union
 from datetime import datetime
-from game.models import GameState
-from config.config import *
-from config.loader import *
+from ai_snake.game.models import GameState
+from ai_snake.config.config import *
+from ai_snake.config.loader import *
 import logging
 
 class LeaderboardEntry:

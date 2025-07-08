@@ -1,14 +1,14 @@
 import pygame
 import logging
 from typing import Tuple, Optional, List, Dict
-from src.config.config import (
+from ai_snake.config.config import (
     BLACK, BLUE, GREEN, RED, WHITE, SCREEN_WIDTH, SCREEN_HEIGHT,
     FONT, FONT_SMALL, RETRO_FONT
 )
-from src.game.models import GameState
-from src.config.loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file
-from src.render.leaderboard import Leaderboard
-from src.render.base import BaseRenderer
+from ai_snake.game.models import GameState
+from ai_snake.config.loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file
+from ai_snake.render.leaderboard import Leaderboard
+from ai_snake.render.base import BaseRenderer
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class GameRenderer(BaseRenderer):
             self.screen = None
         
         # Load config
-        config = load_config('src/config/config.yaml')
+        config = load_config('config/config.yaml')
         self.panel_padding = get_panel_padding(config)
         self.grid_padding = get_grid_padding(config)
         self.leaderboard_file = get_leaderboard_file(config)

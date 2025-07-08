@@ -1,9 +1,9 @@
 import pygame
 
-from src.render.renderer import MenuRenderer
-from src.game.models import GameState
-from src.config.config import *
-from src.config.loader import *
+from ai_snake.render.renderer import MenuRenderer
+from ai_snake.game.models import GameState
+from ai_snake.config.config import *
+from ai_snake.config.loader import *
 
 
 def draw_centered_text(screen, text, y):

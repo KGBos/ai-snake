@@ -1,7 +1,7 @@
 from collections import deque
 from typing import Tuple, Optional, List
 import logging
-from src.game.models import GameState
+from ai_snake.game.models import GameState
 
 
 class AIController:

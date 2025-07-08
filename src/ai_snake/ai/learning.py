@@ -1,14 +1,14 @@
 import torch
 import numpy as np
 from typing import Tuple, Optional
-from game.models import GameState
-from ai.dqn import DQNAgent
+from ai_snake.game.models import GameState
+from ai_snake.ai.dqn import DQNAgent
 import logging
 import os
 from datetime import datetime
-from ai.rule_based import AIController
+from ai_snake.ai.rule_based import AIController
+from ai_snake.utils.logging_utils import setup_logging
 import json
-from src.utils.logging_utils import setup_logging
 
 # Set up file logging for post-game analysis
 def setup_game_logging(json_mode=False):

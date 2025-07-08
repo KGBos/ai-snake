@@ -7,9 +7,9 @@ import tempfile
 import shutil
 import pytest
 import glob
-from src.utils.logging_utils import setup_logging
-from ai.learning import LearningAIController
-from game.models import GameState
+from ai_snake.utils.logging_utils import setup_logging
+from ai_snake.ai.learning import LearningAIController
+from ai_snake.game.models import GameState
 
 @pytest.fixture
 def temp_log_dir():

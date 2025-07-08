@@ -5,20 +5,20 @@ if '--headless' in sys.argv or os.environ.get('SNAKE_HEADLESS') == '1':
     os.environ['SDL_VIDEODRIVER'] = 'dummy'
 import pygame
 from typing import Optional, Tuple
-from src.game.models import GameState
-from src.render.renderer import GameRenderer
-from src.render.headless import HeadlessRenderer
-from src.render.web import WebRenderer
-from src.render.base import BaseRenderer
-from src.ai.rule_based import AIController
-from src.ai.learning import LearningAIController, RewardCalculator, print_game_analysis, log_file_path
-from src.config.config import HIGH_SCORE_FILE
-from src.config.loader import load_config
+from ai_snake.game.models import GameState
+from ai_snake.render.renderer import GameRenderer
+from ai_snake.render.headless import HeadlessRenderer
+from ai_snake.render.web import WebRenderer
+from ai_snake.render.base import BaseRenderer
+from ai_snake.ai.rule_based import AIController
+from ai_snake.ai.learning import LearningAIController, RewardCalculator, print_game_analysis, log_file_path
+from ai_snake.config.config import HIGH_SCORE_FILE
+from ai_snake.config.loader import load_config
 import logging
-from src.game.input_handler import InputHandler
-from src.game.state_manager import GameStateManager
-from src.ai.manager import AIManager
-from src.leaderboard_service import LeaderboardService
+from ai_snake.game.input_handler import InputHandler
+from ai_snake.game.state_manager import GameStateManager
+from ai_snake.ai.manager import AIManager
+from ai_snake.game.leaderboard_service import LeaderboardService
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class GameController:
         self.starvation_threshold = starvation_threshold if starvation_threshold is not None else 50
         
         # Load config for reward system
-        config = load_config('src/config/config.yaml')
+        config = load_config('config/config.yaml')
         
         self.speed = speed
         self.ai = ai
@@ -332,7 +332,7 @@ class GameController:
             '+/-: Speed'
         ]
         # Only call GameRenderer methods/attributes if renderer is GameRenderer
-        from src.render.renderer import GameRenderer
+        from ai_snake.render.renderer import GameRenderer
         if isinstance(self.renderer, GameRenderer):
             self.renderer.render(self.state_manager.game_state, current_time, info)
         else:
@@ -358,7 +358,7 @@ class GameController:
             high_score_flag = self.state_manager.game_state.score == self.high_score
             self.leaderboard_service.add_entry(self.episode_count, last_reward, death_type, high_score=high_score_flag)
             # Auto-save based on config settings
-            config = load_config('src/config/config.yaml')
+            config = load_config('config/config.yaml')
             auto_save_enabled = config['learning'].get('auto_save_enabled', True)
             auto_save_interval = config['learning'].get('auto_save_interval', 1)  # Default to every episode
             auto_save_filename = config['learning'].get('auto_save_filename', 'snake_dqn_model_auto.pth')
@@ -529,7 +529,7 @@ class GameController:
     
     def get_settings(self) -> dict:
         """Get current game settings."""
-        from src.render.renderer import GameRenderer
+        from ai_snake.render.renderer import GameRenderer
         settings = {
             'speed': self.speed,
             'grid': (self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height),
@@ -545,7 +545,7 @@ class GameController:
         self.speed = settings.get('speed', self.speed)
         grid = settings.get('grid', (self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height))
         self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height = grid
-        from src.render.renderer import GameRenderer
+        from ai_snake.render.renderer import GameRenderer
         if isinstance(self.renderer, GameRenderer):
             self.renderer.set_grid_size(grid[0], grid[1])
             self.renderer.nes_mode = settings.get('nes', self.renderer.nes_mode)
