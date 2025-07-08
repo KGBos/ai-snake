@@ -5,13 +5,14 @@ if '--headless' in sys.argv or os.environ.get('SNAKE_HEADLESS') == '1':
     os.environ['SDL_VIDEODRIVER'] = 'dummy'
 import pygame
 from typing import Optional, Tuple
-from .models import GameState
-from .renderer import GameRenderer
-from .ai_controller import AIController
-from .learning_ai_controller import LearningAIController, RewardCalculator, print_game_analysis
-from .config import HIGH_SCORE_FILE
-from .config_loader import load_config
+from game.models import GameState
+from render.renderer import GameRenderer
+from src.ai.rule_based import AIController
+from src.ai.learning import LearningAIController, RewardCalculator, print_game_analysis, log_file_path
+from config.config import HIGH_SCORE_FILE
+from config.loader import load_config
 import logging
+from game.input_handler import InputHandler
 
 
 class GameController:
@@ -52,7 +53,7 @@ class GameController:
         self.starvation_threshold = starvation_threshold if starvation_threshold is not None else 50
         
         # Load config for reward system
-        config = load_config('src/config.yaml')
+        config = load_config('config/config.yaml')
         
         if learning_ai:
             self.learning_ai_controller = LearningAIController(
@@ -78,6 +79,8 @@ class GameController:
         self.debug_learning = True  # Always show learning process
         
         self.death_type = None
+        
+        self.input_handler = InputHandler(self)
     
     def load_high_score(self) -> int:
         """Load high score from file."""
@@ -96,66 +99,6 @@ class GameController:
                 f.write(str(self.high_score))
         except IOError:
             pass  # Silently fail if we can't save
-    
-    def handle_input(self, event: pygame.event.Event) -> bool:
-        """Handle a single input event. Returns True if game should continue."""
-        if event.type == pygame.QUIT:
-            logging.info('Received QUIT event.')
-            return False
-        
-        if event.type == pygame.KEYDOWN:
-            logging.debug(f'Key pressed: {event.key}')
-            if event.key == pygame.K_q:
-                logging.info('Q pressed - quitting game.')
-                return False  # Quit on Q key
-            elif event.key == pygame.K_ESCAPE:
-                logging.info('Pause/Quit triggered.')
-                return False  # Signal to pause
-            elif event.key == pygame.K_t:
-                self.ai = not self.ai
-                logging.info(f'Rule-based AI toggled: {self.ai}')
-            elif event.key == pygame.K_l:
-                # Toggle learning AI
-                if self.learning_ai_controller:
-                    self.learning_ai = not self.learning_ai
-                    logging.info(f'Learning AI toggled: {self.learning_ai}')
-            elif event.key == pygame.K_m:
-                # Toggle manual teaching mode (override AI with manual input)
-                if self.learning_ai and self.learning_ai_controller:
-                    self.manual_teaching_mode = not getattr(self, 'manual_teaching_mode', False)
-                    logging.info(f'Manual teaching mode: {self.manual_teaching_mode}')
-            elif event.key == pygame.K_p:
-                # Toggle learning pause (stop training but keep AI running)
-                if self.learning_ai_controller:
-                    self.learning_ai_controller.set_training_mode(not self.learning_ai_controller.training)
-                    logging.info(f'Learning paused: {not self.learning_ai_controller.training}')
-            elif event.key in (pygame.K_PLUS, pygame.K_EQUALS):
-                self.speed += 1
-                logging.info(f'Increased speed to {self.speed}')
-            elif event.key == pygame.K_MINUS:
-                self.speed = max(1, self.speed - 1)
-                logging.info(f'Decreased speed to {self.speed}')
-            elif not self.ai and not self.learning_ai:
-                self.handle_direction_input(event.key)
-            elif self.learning_ai and getattr(self, 'manual_teaching_mode', False):
-                # Manual input during teaching mode
-                self.handle_direction_input(event.key)
-        
-        return True
-    
-    def handle_direction_input(self, key: int):
-        """Handle direction input for manual control."""
-        old_direction = self.game_state.direction
-        if key == pygame.K_UP:
-            self.game_state.set_direction((0, -1))
-        elif key == pygame.K_DOWN:
-            self.game_state.set_direction((0, 1))
-        elif key == pygame.K_LEFT:
-            self.game_state.set_direction((-1, 0))
-        elif key == pygame.K_RIGHT:
-            self.game_state.set_direction((1, 0))
-        if self.game_state.direction != old_direction:
-            logging.debug(f'Direction changed from {old_direction} to {self.game_state.direction}')
     
     def update(self):
         """Update game state for one frame."""
@@ -432,7 +375,7 @@ class GameController:
             # Add to both leaderboards using the persistent episode_count
             self.renderer.add_leaderboard_entry(self.episode_count, last_reward, death_type)
             # Auto-save based on config settings
-            config = load_config('src/config.yaml')
+            config = load_config('config/config.yaml')
             auto_save_enabled = config['learning'].get('auto_save_enabled', True)
             auto_save_interval = config['learning'].get('auto_save_interval', 1)  # Default to every episode
             auto_save_filename = config['learning'].get('auto_save_filename', 'snake_dqn_model_auto.pth')
@@ -445,8 +388,16 @@ class GameController:
     def run_game_loop(self) -> bool:
         """Run the main game loop. Returns True if game should continue, False to quit."""
         if self.headless:
-            # Configure logging to console for headless mode
-            logging.basicConfig(level=logging.INFO, format='[HEADLESS] %(message)s')
+            # Guarantee logging prints to console in headless mode
+            root_logger = logging.getLogger()
+            for handler in root_logger.handlers[:]:
+                root_logger.removeHandler(handler)
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setFormatter(logging.Formatter('[HEADLESS] %(message)s'))
+            root_logger.addHandler(console_handler)
+            root_logger.setLevel(logging.INFO)
+            # TEST LOG: Confirm headless logger is active
+            logging.info('Headless mode logger active. Only [HEADLESS] stats will be shown.')
             # Headless mode: no rendering, no event handling, run as fast as possible
             while not self.game_state.game_over:
                 self.update()
@@ -476,7 +427,7 @@ class GameController:
         else:
             while not self.game_state.game_over:
                 for event in pygame.event.get():
-                    if not self.handle_input(event):
+                    if not self.input_handler.handle_input(event):
                         if self.learning_ai and self.learning_ai_controller:
                             self.print_learning_report()
                         return False
@@ -594,7 +545,6 @@ class GameController:
         # Print detailed game analysis if learning AI was used
         if self.learning_ai and self.learning_ai_controller:
             try:
-                from .learning_ai_controller import log_file_path
                 if log_file_path and os.path.exists(log_file_path):
                     print_game_analysis(log_file_path)
             except Exception as e:

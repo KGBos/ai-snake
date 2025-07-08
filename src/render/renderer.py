@@ -1,13 +1,13 @@
 import pygame
 import logging
 from typing import Tuple, Optional, List, Dict
-from .config import (
+from config.config import (
     BLACK, BLUE, GREEN, RED, WHITE, SCREEN_WIDTH, SCREEN_HEIGHT,
     FONT, FONT_SMALL, RETRO_FONT
 )
-from .models import GameState
-from .config_loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file
-from .leaderboard import Leaderboard
+from game.models import GameState
+from config.loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file
+from render.leaderboard import Leaderboard
 
 
 class GameRenderer:
@@ -24,7 +24,7 @@ class GameRenderer:
             self.screen = None
         
         # Load config
-        config = load_config('src/config.yaml')
+        config = load_config('config/config.yaml')
         self.panel_padding = get_panel_padding(config)
         self.grid_padding = get_grid_padding(config)
         self.leaderboard_file = get_leaderboard_file(config)

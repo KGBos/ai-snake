@@ -1,9 +1,9 @@
 import pygame
 
-from .config import (
-    BLUE, WHITE, BLACK, SCREEN_WIDTH, SCREEN_HEIGHT, DEFAULT_GRID,
-    FONT, FONT_SMALL
-)
+from render.renderer import MenuRenderer
+from game.models import GameState
+from config.config import *
+from config.loader import *
 
 
 def draw_centered_text(screen, text, y):

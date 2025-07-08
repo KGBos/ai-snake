@@ -1,38 +1,32 @@
 import torch
 import numpy as np
 from typing import Tuple, Optional
-from .models import GameState
-from .dqn_agent import DQNAgent
+from src.models import GameState
+from src.ai.dqn import DQNAgent
 import logging
 import os
 from datetime import datetime
+from src.ai.rule_based import AIController
 
 # Set up file logging for post-game analysis
 def setup_game_logging():
     """Set up logging to file for post-game analysis."""
-    # Create logs directory if it doesn't exist
     os.makedirs('logs', exist_ok=True)
-    
-    # Create unique log file name with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_filename = f"logs/game_session_{timestamp}.log"
-    
-    # Configure logging to write to file only (no console output)
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_filename, mode='w')
-            # Removed StreamHandler to eliminate console output
-        ]
-    )
-    
+    # Create a dedicated file logger (not root)
     logger = logging.getLogger('GameAnalysis')
+    logger.setLevel(logging.INFO)
+    # Remove all handlers first (avoid duplicate logs)
+    logger.handlers = []
+    file_handler = logging.FileHandler(log_filename, mode='w')
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    logger.propagate = False  # Prevent logs from going to root logger/console
     logger.info(f"=== GAME SESSION STARTED ===")
     logger.info(f"Log file: {log_filename}")
     logger.info(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
-    
     return logger, log_filename
 
 # Global logger for the game session
@@ -313,7 +307,6 @@ class RewardCalculator:
             self.reward_breakdown['oscillation_penalty'] = -self.oscillation_penalty
         
         # 8. PATH AVAILABILITY BONUS (bonus if path to food exists)
-        from src.ai_controller import AIController
         ai = AIController()
         path_exists = ai.path_exists(current_head, current_food, set(game_state.get_snake_body()[1:]), game_state.grid_width, game_state.grid_height)
         if path_exists:
