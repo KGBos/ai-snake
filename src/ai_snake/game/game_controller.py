@@ -1,3 +1,4 @@
+# FIXME: Review this file for potential issues or improvements
 import os
 import sys
 # Set SDL_VIDEODRIVER to 'dummy' for true headless mode (no window)

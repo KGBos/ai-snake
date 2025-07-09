@@ -1,3 +1,4 @@
+# FIXME: Review this file for potential issues or improvements
 from ai_snake.render.base import BaseRenderer
 from ai_snake.game.models import GameState
 from typing import Optional

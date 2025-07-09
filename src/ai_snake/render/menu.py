@@ -1,3 +1,4 @@
+# FIXME: Review this file for potential issues or improvements
 import pygame
 
 from ai_snake.render.renderer import MenuRenderer
