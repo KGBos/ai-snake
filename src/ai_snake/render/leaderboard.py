@@ -101,6 +101,12 @@ class Leaderboard:
                 entry.rank_change = (entry.previous_rank - (i + 1)) if entry.previous_rank else 0
                 break
         
+        # --- FIX: Only highest reward entries get high_score=True ---
+        if self.entries:
+            highest_reward = max(e.reward for e in self.entries)
+            for e in self.entries:
+                e.high_score = (e.reward == highest_reward and highest_reward > 0)
+        
         # Save to file
         self.save_leaderboard()
         

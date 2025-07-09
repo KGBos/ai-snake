@@ -355,7 +355,10 @@ class GameController:
                 last_reward = self.ai_manager.learning_ai_controller.agent.episode_rewards[-1]
             death_type = str(self.state_manager.game_state.death_type) if self.state_manager.game_state.death_type else "other"
             # Add to both leaderboards using the persistent episode_count
-            high_score_flag = self.state_manager.game_state.score == self.high_score
+            # Determine if this is a session high score by comparing reward with session's highest reward
+            session_entries = self.leaderboard_service.get_session_entries()
+            session_highest_reward = max([entry.get('reward', 0) for entry in session_entries]) if session_entries else 0
+            high_score_flag = last_reward >= session_highest_reward and last_reward > 0
             self.leaderboard_service.add_entry(self.episode_count, last_reward, death_type, high_score=high_score_flag)
             # Auto-save based on config settings
             config = load_config('config/config.yaml')
