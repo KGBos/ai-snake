@@ -56,7 +56,7 @@ cover/
 *.pot
 
 # Django stuff:
-*.log
+# *.log  # Uncomment this line to ignore all log files
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -191,9 +191,17 @@ Thumbs.db
 # Project-specific ignores
 # Model weights and training outputs
 best_snake_ai.pth
+snake_dqn_model_auto.pth
+*.pth
 fast_training_*/
 training_output_*/
 training_log.txt
+
+# Log files
+*.log
+ai_console.log
+pytest_output*.log
+logs/
 
 # Ignore all __pycache__ folders recursively
 **/__pycache__/ 
