@@ -7,7 +7,7 @@ game:
 
 ai:
   enable_tracing: false
-  model_path: null
+  model_path: "snake_dqn_model_auto.pth"
 
 learning:
   learning_rate: 0.001
@@ -45,5 +45,5 @@ display:
   screen_height: 720
   stats_area_height: 250
   grid_padding: 0
-  panel_padding: 15
+  panel_padding: 0
   leaderboard_file: "leaderboard.json" 

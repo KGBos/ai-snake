@@ -45,7 +45,7 @@ class GameController:
 
     def __init__(self, speed: int = 10, ai: bool = False, grid: Tuple[int, int] = (20, 20), 
                  nes_mode: bool = False, ai_tracing: bool = False, auto_advance: bool = False,
-                 learning_ai: bool = False, model_path: Optional[str] = None, headless: bool = False, web: bool = False, starvation_threshold: Optional[int] = None):
+                 learning_ai: bool = False, model_path: Optional[str] = None, headless: bool = False, web: bool = False, starvation_threshold: Optional[int] = None, log_to_file: bool = False):
         self.headless = headless
         self.web = web
         if self.headless:
@@ -58,7 +58,7 @@ class GameController:
             self.renderer = GameRenderer(nes_mode=nes_mode, headless=headless)
             self.clock = pygame.time.Clock()
         self.state_manager = GameStateManager(grid[0], grid[1])
-        self.ai_manager = AIManager(grid_size=grid, ai_tracing=ai_tracing, learning_ai=learning_ai, model_path=model_path)
+        self.ai_manager = AIManager(grid_size=grid, ai_tracing=ai_tracing, learning_ai=learning_ai, model_path=model_path, log_to_file=log_to_file)
         self.model_path = model_path  # Store model_path for info area
         self.starvation_threshold = starvation_threshold if starvation_threshold is not None else 50
         
@@ -340,6 +340,12 @@ class GameController:
     
     def reset(self):
         """Reset the game to initial state."""
+        # Log death for rule-based AI before reset
+        if self.ai and hasattr(self.ai_manager, 'ai_controller'):
+            death_type = str(self.state_manager.game_state.death_type) if self.state_manager.game_state.death_type else "unknown"
+            move_count = getattr(self.ai_manager.ai_controller, 'move_count', 0)
+            self.ai_manager.ai_controller.log_death(death_type, move_count)
+            self.ai_manager.ai_controller.reset_stats()
         # Record episode end for learning AI
         if self.learning_ai:
             self.ai_manager.record_episode_end(self.state_manager.game_state.score, death_type=str(self.state_manager.game_state.death_type) if self.state_manager.game_state.death_type else "unknown")

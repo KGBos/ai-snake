@@ -11,6 +11,21 @@ from ai_snake.config.loader import load_config, get_grid_size, get_game_speed, g
 
 logger = logging.getLogger(__name__)
 
+def setup_ai_logging(log_to_file):
+    if log_to_file:
+        os.makedirs('logs', exist_ok=True)
+        logging.basicConfig(
+            level=logging.INFO,
+            filename='logs/ai_moves.log',
+            filemode='w',
+            format='%(asctime)s [%(levelname)s] %(message)s'
+        )
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s [%(levelname)s] %(message)s'
+        )
+
 def parse_args():
     parser = argparse.ArgumentParser(description="AI Snake Game Launcher")
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
@@ -32,6 +47,7 @@ def parse_args():
     play_parser.add_argument('--headless', action='store_true', help='Run in true headless mode (no rendering)')
     play_parser.add_argument('--starvation-threshold', type=int, default=None, help='Override starvation threshold (moves without food) for this session')
     play_parser.add_argument('--web', action='store_true', help='Use web renderer (localhost Flask)')
+    play_parser.add_argument('--log', action='store_true', help='Save AI logs with timestamps to logs/ai_moves.log')
 
     # Test model subcommand
     test_parser = subparsers.add_parser('test-model', help='Test a trained model')
@@ -70,7 +86,15 @@ def play_game(args):
     nes_mode = args.nes if args.nes else get_nes_mode(config)
     auto_advance = args.auto_advance if args.auto_advance else get_auto_advance(config)
     ai_tracing = args.ai_tracing if args.ai_tracing else get_ai_tracing(config)
-    model_path = args.model if args.model else get_model_path(config)
+    # Determine which model path to use and print which mode is loaded:
+    # - If the user provided --model on the command line, use that.
+    # - Otherwise, fall back to the model path specified in the config file.
+    if args.model:
+        model_path = args.model
+        logger.info(f"Loading model from command line argument: {model_path}")
+    else:
+        model_path = get_model_path(config)
+        logger.info(f"Loading model from config file: {model_path}")
     starvation_threshold = args.starvation_threshold if hasattr(args, 'starvation_threshold') and args.starvation_threshold is not None else None
     
     pygame.init()
@@ -85,7 +109,8 @@ def play_game(args):
         model_path=model_path,
         headless=getattr(args, 'headless', False),
         web=getattr(args, 'web', False),
-        starvation_threshold=starvation_threshold
+        starvation_threshold=starvation_threshold,
+        log_to_file=getattr(args, 'log', False)  # Pass log flag
     )
     
     # Enable debug learning if requested
@@ -133,6 +158,8 @@ def main():
     # Setup centralized logging
     log_level = 'DEBUG' if getattr(args, 'debug', False) else 'INFO'
     json_mode = False  # Could add a CLI flag for this if desired
+    # Setup AI logging before any game logic
+    setup_ai_logging(getattr(args, 'log', False))
     setup_logging(log_to_file=True, log_to_console=True, log_level=log_level, json_mode=json_mode)
     logger.debug('Centralized logging enabled.')
     if args.command == 'play':

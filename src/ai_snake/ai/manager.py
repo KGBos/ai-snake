@@ -3,8 +3,8 @@ from ai_snake.ai.learning import LearningAIController, RewardCalculator
 from ai_snake.config.loader import load_config
 
 class AIManager:
-    def __init__(self, grid_size, ai_tracing=False, learning_ai=False, model_path=None, config_path='config/config.yaml', starvation_threshold=50):
-        self.ai_controller = AIController(enable_tracing=ai_tracing)
+    def __init__(self, grid_size, ai_tracing=False, learning_ai=False, model_path=None, config_path='config/config.yaml', starvation_threshold=50, log_to_file=False):
+        self.ai_controller = AIController(enable_tracing=ai_tracing, log_to_file=log_to_file)
         self.learning_ai_controller = None
         self.learning_ai = learning_ai
         self.model_path = model_path
