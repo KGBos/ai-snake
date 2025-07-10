@@ -203,5 +203,11 @@ ai_console.log
 pytest_output*.log
 logs/
 
+# Runtime-generated files
+episode_id.txt
+leaderboard.json
+package-lock.json
+outputs/performance_results.txt
+
 # Ignore all __pycache__ folders recursively
 **/__pycache__/ 
