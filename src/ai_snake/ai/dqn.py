@@ -217,10 +217,10 @@ class DQNAgent:
         
         self.memory.append(Experience(state, action, reward, next_state, done))
     
-    def replay(self):
-        """Train the network on a batch of experiences."""
+    def replay(self) -> Tuple[float, float]:
+        """Train the network on a batch of experiences. Returns (loss, mean_q_value)."""
         if len(self.memory) < self.batch_size:
-            return
+            return 0.0, 0.0
         
         # Sample batch
         batch = random.sample(self.memory, self.batch_size)
@@ -259,8 +259,9 @@ class DQNAgent:
             self.target_network.load_state_dict(self.q_network.state_dict())
         
         # Decay epsilon
-        if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+            
+        return loss.item(), current_q_values.mean().item()
     
     def save_model(self, filepath: str):
         """Save the trained model."""

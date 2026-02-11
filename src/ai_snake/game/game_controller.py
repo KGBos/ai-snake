@@ -63,6 +63,7 @@ class GameController:
         self.ai_manager = AIManager(grid_size=grid, ai_tracing=ai_tracing, learning_ai=learning_ai, model_path=model_path, log_to_file=log_to_file)
         self.model_path = model_path  # Store model_path for info area
         self.starvation_threshold = starvation_threshold if starvation_threshold is not None else 50
+        self.log_to_file = log_to_file
         
         # Load config for reward system
         config = load_config(CONFIG_FILE)
@@ -343,43 +344,135 @@ class GameController:
             # Guarantee logging prints to console in headless mode (configure once).
             root_logger = logging.getLogger()
             if not getattr(self, "_headless_logging_configured", False):
+                # Remove all handlers to avoid duplicate logs in tqdm
                 for handler in root_logger.handlers[:]:
                     root_logger.removeHandler(handler)
-                console_handler = logging.StreamHandler(sys.stdout)
-                console_handler.setFormatter(logging.Formatter('[HEADLESS] %(message)s'))
-                root_logger.addHandler(console_handler)
+                # No console handler - we want tqdm to handle stdout
+                # Only file logging if requested
+                if self.log_to_file:
+                    file_handler = logging.FileHandler('logs/training.log')
+                    file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+                    root_logger.addHandler(file_handler)
+                
                 root_logger.setLevel(logging.INFO)
                 self._headless_logging_configured = True
-                logger.info('Headless mode logger active. Only [HEADLESS] stats will be shown.')
 
-            # Headless mode: run episodes forever (caller can Ctrl+C to stop).
-            while True:
-                while not self.game_state.game_over:
-                    self.update()
+            # Headless mode: run with Web Dashboard & Rich Dashboard
+            try:
+                from ai_snake.utils.dashboard import TrainingDashboard
+                from ai_snake.utils.stats_exporter import StatsExporter
+                from ai_snake.utils.logger import WandbLogger
+                from ai_snake.render.video import VideoRenderer
+                from rich.live import Live
+                
+                # Use a large number effectively infinite or use the config value
+                total_episodes = 5000  # Default or config
+                dashboard = TrainingDashboard(total_episodes=total_episodes)
+                exporter = StatsExporter(output_file='dashboard_data.json')
+                
+                # Initialize WandB Logger
+                self.wandb_logger = WandbLogger(project_name="ai-snake-v2", config={
+                    "grid_size": self.game_state.grid_width,
+                    "model": "dqn",
+                    "speed": "fast"
+                })
+                
+                # Pass logger to AI Manager
+                if self.ai_manager.learning_ai_controller:
+                    self.ai_manager.learning_ai_controller.wandb_logger = self.wandb_logger
+                    # Update AIManager's reference too for toggling
+                    self.ai_manager.wandb_logger = self.wandb_logger
+                
+                # Video Renderer
+                self.video_renderer = VideoRenderer()
+                self.recording_video = False
+                self.video_frames = []
+                
+                # Start Live context
+                with Live(dashboard.layout, refresh_per_second=10) as live:
+                    recent_scores = []
+                    
+                    while True:
+                        # Video Recording Logic: Record every 500 episodes or first few
+                        record_video = (self.episode_count % 500 == 0) or (self.episode_count <= 5)
+                        if record_video:
+                            self.video_frames = []
+                        
+                        while not self.game_state.game_over:
+                            self.update()
+                            
+                            # Capture frame if recording
+                            if record_video:
+                                try:
+                                    # Create info dict for renderer
+                                    info = {
+                                        'score': self.game_state.score,
+                                        'deaths': self.episode_count,
+                                        'training_step': self.ai_manager.learning_ai_controller.agent.training_step if self.ai_manager.learning_ai_controller else 0
+                                    }
+                                    self.video_renderer._draw_frame(self.game_state, info)
+                                    frame = self.video_renderer.get_frame()
+                                    self.video_frames.append(frame)
+                                except Exception as e:
+                                    logger.error(f"Video capture failed: {e}")
 
-                if self.game_state.score > self.high_score:
-                    self.save_high_score()
+                        if self.game_state.score > self.high_score:
+                            self.save_high_score()
 
-                if self.learning_ai and self.ai_manager.learning_ai_controller is not None:
-                    episode_count = self.episode_count
-                    episode_rewards = self.ai_manager.learning_ai_controller.agent.episode_rewards
-                    if episode_rewards:
-                        current_reward = episode_rewards[-1]
-                        avg_reward = sum(episode_rewards) / len(episode_rewards)
-                        top_reward = max(episode_rewards)
-                    else:
-                        current_reward = 0
-                        avg_reward = 0
-                        top_reward = 0
-                    highlight = ''
-                    if current_reward == top_reward and len(episode_rewards) > 1:
-                        highlight = ' *** NEW HIGH SCORE! ***'
-                    logger.info(
-                        f"Episode: {episode_count} | Current reward: {current_reward:.2f} | "
-                        f"Avg reward: {avg_reward:.2f} | High: {top_reward:.2f}{highlight}"
-                    )
+                        # Collect stats for dashboard
+                        episode_reward = 0
+                        epsilon = 1.0
+                        memory_use = 0
+                        
+                        if self.learning_ai and self.ai_manager.learning_ai_controller is not None:
+                            agent = self.ai_manager.learning_ai_controller.agent
+                            if agent.episode_rewards:
+                                episode_reward = agent.episode_rewards[-1]
+                                epsilon = agent.epsilon
+                                memory_use = len(agent.memory)
+                        
+                        # Update moving average
+                        recent_scores.append(episode_reward)
+                        if len(recent_scores) > 50:
+                            recent_scores.pop(0)
+                        avg_score = sum(recent_scores) / len(recent_scores) if recent_scores else 0
+                        
+                        # Data packet
+                        stats = {
+                            'episode': self.episode_count,
+                            'current_score': episode_reward,
+                            'avg_score': avg_score,
+                            'epsilon': epsilon,
+                            'memory': memory_use,
+                            'game_over': True,
+                            'death_type': self.game_state.death_type if hasattr(self.game_state, 'death_type') else 'unknown',
+                            'steps_this_game': self.game_state.step_count if hasattr(self.game_state, 'step_count') else 0
+                        }
+                        
+                        # Log Video to WandB
+                        if record_video and self.video_frames:
+                            if self.wandb_logger:
+                                self.wandb_logger.log_video(
+                                    f"gameplay/ep_{self.episode_count}", 
+                                    self.video_frames, 
+                                    fps=20
+                                )
+                            self.video_frames = [] # Clear memory
+                        
+                        # Update Visuals
+                        dashboard.update(stats)
+                        live.update(dashboard.layout)
+                        
+                        # Export for Web
+                        exporter.update(stats)
 
-                self.reset()
+                        self.reset()
+            except ImportError as e:
+                print(f"Rich/WandB/Dashboard not found ({e}), falling back to simple logging")
+                while True:
+                    while not self.game_state.game_over:
+                        self.update()
+                    self.reset()
         else:
             # Interactive mode
             running = True

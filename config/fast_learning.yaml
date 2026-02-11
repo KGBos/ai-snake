@@ -1,0 +1,40 @@
+game:
+  grid_width: 10
+  grid_height: 10
+  speed: 0  # 0 means unlimited/max speed
+  nes_mode: false
+  auto_advance: true
+
+ai:
+  enable_tracing: false
+  model_path: "snake_dqn_model_fast.pth"
+
+learning:
+  learning_rate: 0.005
+  batch_size: 64
+  episodes: 5000
+  epsilon: 1.0
+  epsilon_min: 0.05
+  epsilon_decay: 0.995
+  memory_size: 20000
+  gamma: 0.95
+  # Reward shaping
+  food_reward: 50.0  # Smaller reward for smaller grid
+  death_penalty: -20.0
+  move_penalty: 0.01
+  survival_bonus: 0.1
+  distance_reward_weight: 1.0
+  distance_penalty_weight: 0.2
+  efficiency_bonus: 5.0
+  # Auto-save settings
+  auto_save_enabled: true
+  auto_save_interval: 100
+  auto_save_filename: "snake_dqn_model_fast.pth"
+
+display:
+  screen_width: 800
+  screen_height: 600
+  stats_area_height: 150
+  grid_padding: 0
+  panel_padding: 0
+  leaderboard_file: "leaderboard_fast.json"

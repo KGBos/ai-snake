@@ -45,8 +45,10 @@ class LearningAIController:
     """Learning AI controller that uses DQN to make decisions."""
     
     def __init__(self, grid_size: Tuple[int, int], device: Optional[str] = None, 
-                 model_path: Optional[str] = None, training: bool = True, train_frequency: int = 4):
+                 model_path: Optional[str] = None, training: bool = True, train_frequency: int = 4,
+                 wandb_logger=None):
         self.grid_size = grid_size
+        self.wandb_logger = wandb_logger
         
         # Auto-detect device if not specified
         if device is None:
@@ -174,7 +176,14 @@ class LearningAIController:
         self.current_episode_length += 1
         
         if self.step_count % self.train_frequency == 0:
-            self.agent.replay()
+            loss, mean_q = self.agent.replay()
+            if self.wandb_logger and loss != 0:
+                self.wandb_logger.log({
+                    "train/loss": loss,
+                    "train/mean_q": mean_q,
+                    "train/epsilon": self.agent.epsilon,
+                    "train/buffer_size": len(self.agent.memory)
+                }, step=self.agent.training_step)
             
         # Update last state and score
         self.last_state = current_state
@@ -210,6 +219,25 @@ class LearningAIController:
                 get_game_logger().info(json.dumps(episode_data))
             except Exception as e:
                 logging.getLogger(__name__).warning(f"Failed to log JSON episode data: {e}")
+            
+            # WandB Logging
+            if self.wandb_logger:
+                self.wandb_logger.log({
+                    "game/score": final_score,
+                    "game/length": self.current_episode_length,
+                    "game/reward": self.current_episode_reward,
+                    "game/food": self.food_eaten_this_episode,
+                    "game/efficiency": self.current_episode_length / max(1, self.food_eaten_this_episode),
+                    "game/death_type": death_type if death_type else "unknown"
+                })
+                
+                # Log Replay Buffer Histogram occasionally
+                if len(self.agent.episode_rewards) % 50 == 0 and len(self.agent.memory) > 0:
+                    # Sample rewards from memory
+                    sample_size = min(1000, len(self.agent.memory))
+                    sample = list(self.agent.memory)[:sample_size] # Simple slice or random sample
+                    rewards = [e.reward for e in sample]
+                    self.wandb_logger.log_histogram("params/buffer_rewards", rewards)
             # Always reset episode stats
             self.current_episode_reward = 0
             self.current_episode_length = 0

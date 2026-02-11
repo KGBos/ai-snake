@@ -4,15 +4,16 @@ from ai_snake.ai.learning import LearningAIController, RewardCalculator
 from ai_snake.config.loader import load_config, CONFIG_FILE
 
 class AIManager:
-    def __init__(self, grid_size, ai_tracing=False, learning_ai=False, model_path=None, config_path=CONFIG_FILE, starvation_threshold=50, log_to_file=False):
+    def __init__(self, grid_size, ai_tracing=False, learning_ai=False, model_path=None, config_path=CONFIG_FILE, starvation_threshold=50, log_to_file=False, wandb_logger=None):
         self.ai_controller = AIController(enable_tracing=ai_tracing, log_to_file=log_to_file)
         self.learning_ai_controller = None
         self.learning_ai = learning_ai
         self.model_path = model_path
         self.grid_size = grid_size
+        self.wandb_logger = wandb_logger
         self.reward_calculator = None
         if learning_ai:
-            self.learning_ai_controller = LearningAIController(grid_size=grid_size, model_path=model_path, training=True)
+            self.learning_ai_controller = LearningAIController(grid_size=grid_size, model_path=model_path, training=True, wandb_logger=wandb_logger)
             self.reward_calculator = RewardCalculator(load_config(config_path), starvation_threshold=starvation_threshold)
         else:
             self.reward_calculator = None
@@ -59,7 +60,7 @@ class AIManager:
     def toggle_learning_ai(self):
         self.learning_ai = not self.learning_ai
         if self.learning_ai and not self.learning_ai_controller:
-            self.learning_ai_controller = LearningAIController(grid_size=self.grid_size, model_path=self.model_path, training=True)
+            self.learning_ai_controller = LearningAIController(grid_size=self.grid_size, model_path=self.model_path, training=True, wandb_logger=self.wandb_logger)
             config = load_config(CONFIG_FILE)
             self.reward_calculator = RewardCalculator(config)
 

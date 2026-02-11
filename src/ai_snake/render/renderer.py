@@ -395,6 +395,12 @@ class GameRenderer(BaseRenderer):
     
     def render(self, game_state: GameState, current_time: int, info: Optional[dict] = None):
         """Render the complete game state with three-panel layout."""
+        self._draw_frame(game_state, info)
+        if hasattr(self, 'screen') and self.screen is not None and not self.headless:
+             pygame.display.flip()
+
+    def _draw_frame(self, game_state: GameState, info: Optional[dict] = None):
+        """Draw the frame to the surface."""
         if self.headless or self.screen is None:
             return
         
@@ -429,8 +435,6 @@ class GameRenderer(BaseRenderer):
             info = {}
         self.draw_left_panel(info)
         self.draw_right_panel()
-        
-        pygame.display.flip()
     
     def clear_screen(self):
         """Clear the screen."""

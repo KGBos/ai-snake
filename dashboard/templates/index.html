@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Snake Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body class="dark-theme">
+    <div class="container">
+        <header>
+            <h1>🐍 AI Snake Dashboard</h1>
+            <div class="controls">
+                <span id="training-status" class="status-badge">Checking...</span>
+                <button id="start-btn" onclick="startTraining()">▶ Start Training</button>
+                <button id="stop-btn" onclick="stopTraining()" class="danger">⏹ Stop Training</button>
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="card stat-card">
+                <h3>Episode</h3>
+                <div class="value" id="episode-val">0</div>
+            </div>
+            <div class="card stat-card">
+                <h3>High Score</h3>
+                <div class="value text-green" id="highscore-val">0</div>
+            </div>
+            <div class="card stat-card">
+                <h3>Avg Score (50)</h3>
+                <div class="value text-yellow" id="avg-val">0</div>
+            </div>
+            <div class="card stat-card">
+                <h3>Epsilon</h3>
+                <div class="value text-blue" id="epsilon-val">1.00</div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="charts-row">
+            <div class="card chart-card">
+                <h3>Learning Curve</h3>
+                <canvas id="learningChart"></canvas>
+            </div>
+            <div class="card list-card">
+                <h3>Recent Games</h3>
+                <ul id="recent-games-list">
+                    <li>Waiting for data...</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Achievements -->
+        <div class="achievements-section">
+            <h2>🏆 Achievements</h2>
+            <div class="achievements-grid" id="achievements-grid">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('learningChart').getContext('2d');
+        const learningChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Score',
+                    data: [],
+                    borderColor: '#4ade80',
+                    tension: 0.4,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { display: false },
+                    y: { grid: { color: '#333' } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        function updateDashboard() {
+            fetch('/api/stats?t=' + Date.now())
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) return;
+
+                    // Update Stats
+                    document.getElementById('episode-val').innerText = data.overview.episode;
+                    document.getElementById('highscore-val').innerText = data.performance.best_score;
+                    document.getElementById('avg-val').innerText = data.performance.avg_score_50.toFixed(1);
+                    document.getElementById('epsilon-val').innerText = data.overview.epsilon.toFixed(3);
+
+                    // Update Chart
+                    const trends = data.trends || [];
+                    learningChart.data.labels = trends.map(t => t.episode);
+                    learningChart.data.datasets[0].data = trends.map(t => t.score);
+                    learningChart.update();
+
+                    // Update Recent Games
+                    const list = document.getElementById('recent-games-list');
+                    list.innerHTML = '';
+                    (data.recent_games || []).forEach(game => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<span>Ep ${game.epid}</span> <span>${game.score}</span> <span class="badge ${game.death}">${game.death}</span>`;
+                        list.appendChild(li);
+                    });
+
+                    // Update Achievements
+                    const achGrid = document.getElementById('achievements-grid');
+                    achGrid.innerHTML = '';
+                    (data.achievements || []).forEach(ach => {
+                        const div = document.createElement('div');
+                        div.className = `achievement-card ${ach.unlocked ? 'unlocked' : 'locked'}`;
+                        div.innerHTML = `
+                            <div class="icon">${ach.icon}</div>
+                            <div class="info">
+                                <h4>${ach.name}</h4>
+                                <p>${ach.desc}</p>
+                            </div>
+                        `;
+                        achGrid.appendChild(div);
+                    });
+                });
+        }
+
+        // Training Control
+        function updateStatus() {
+            fetch('/api/training/status')
+                .then(r => r.json())
+                .then(data => {
+                    const badge = document.getElementById('training-status');
+                    const startBtn = document.getElementById('start-btn');
+                    const stopBtn = document.getElementById('stop-btn');
+
+                    if (data.running) {
+                        badge.textContent = "RUNNING";
+                        badge.className = "status-badge running";
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                    } else {
+                        badge.textContent = "STOPPED";
+                        badge.className = "status-badge stopped";
+                        startBtn.disabled = false;
+                        stopBtn.disabled = true;
+                    }
+                });
+        }
+
+        function startTraining() {
+            fetch('/api/training/start', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) alert(data.error);
+                    updateStatus();
+                });
+        }
+
+        function stopTraining() {
+            fetch('/api/training/stop', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) alert(data.error);
+                    updateStatus();
+                });
+        }
+
+        // Initialize
+        updateStatus();
+        setInterval(updateStatus, 2000);
+        setInterval(updateDashboard, 1000); // Live stats
+        updateDashboard();
+    </script>
+</body>
+
+</html>
