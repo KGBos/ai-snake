@@ -7,7 +7,7 @@ from ai_snake.config.config import (
     FONT, FONT_SMALL, RETRO_FONT
 )
 from ai_snake.game.models import GameState
-from ai_snake.config.loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file
+from ai_snake.config.loader import load_config, get_grid_padding, get_panel_padding, get_leaderboard_file, CONFIG_FILE
 from ai_snake.render.leaderboard import Leaderboard
 from ai_snake.render.base import BaseRenderer
 
@@ -27,7 +27,7 @@ class GameRenderer(BaseRenderer):
             self.screen = None
         
         # Load config
-        config = load_config('config/config.yaml')
+        config = load_config(CONFIG_FILE)
         self.panel_padding = get_panel_padding(config)
         self.grid_padding = get_grid_padding(config)
         self.leaderboard_file = get_leaderboard_file(config)

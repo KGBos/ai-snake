@@ -2,7 +2,9 @@ import yaml
 import os
 from typing import Dict, Any, Tuple
 
-def load_config(config_path: str = 'src/config/config.yaml') -> Dict[str, Any]:
+CONFIG_FILE = 'config/config.yaml'
+
+def load_config(config_path: str = CONFIG_FILE) -> Dict[str, Any]:
     """Load YAML config file and return as a dictionary."""
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")

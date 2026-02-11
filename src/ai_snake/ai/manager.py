@@ -1,10 +1,10 @@
 # FIXME: Review this file for potential issues or improvements
 from ai_snake.ai.rule_based import AIController
 from ai_snake.ai.learning import LearningAIController, RewardCalculator
-from ai_snake.config.loader import load_config
+from ai_snake.config.loader import load_config, CONFIG_FILE
 
 class AIManager:
-    def __init__(self, grid_size, ai_tracing=False, learning_ai=False, model_path=None, config_path='config/config.yaml', starvation_threshold=50, log_to_file=False):
+    def __init__(self, grid_size, ai_tracing=False, learning_ai=False, model_path=None, config_path=CONFIG_FILE, starvation_threshold=50, log_to_file=False):
         self.ai_controller = AIController(enable_tracing=ai_tracing, log_to_file=log_to_file)
         self.learning_ai_controller = None
         self.learning_ai = learning_ai
@@ -60,7 +60,7 @@ class AIManager:
         self.learning_ai = not self.learning_ai
         if self.learning_ai and not self.learning_ai_controller:
             self.learning_ai_controller = LearningAIController(grid_size=self.grid_size, model_path=self.model_path, training=True)
-            config = load_config('config/config.yaml')
+            config = load_config(CONFIG_FILE)
             self.reward_calculator = RewardCalculator(config)
 
     def set_training_mode(self, training: bool):

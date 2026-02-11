@@ -7,6 +7,16 @@ setup(
     author='Your Name',
     packages=find_packages(where='src'),
     package_dir={'': 'src'},
-    install_requires=[],  # You can add requirements here or use requirements.txt
-    python_requires='>=3.7',
+    install_requires=[
+        'pygame>=2.6.1',
+        'torch>=2.0.0',
+        'numpy>=1.21.0',
+        'matplotlib>=3.5.0',
+        'tqdm>=4.64.0',
+        'PyYAML>=6.0',
+    ],
+    extras_require={
+        'test': ['pytest>=7.0.0'],
+    },
+    python_requires='>=3.8',
 ) 

@@ -11,9 +11,9 @@ from ai_snake.render.renderer import GameRenderer
 from ai_snake.render.headless import HeadlessRenderer
 from ai_snake.render.base import BaseRenderer
 from ai_snake.ai.rule_based import AIController
-from ai_snake.ai.learning import LearningAIController, RewardCalculator, print_game_analysis, log_file_path
+from ai_snake.ai.learning import LearningAIController, RewardCalculator, get_log_file_path
 from ai_snake.config.config import HIGH_SCORE_FILE
-from ai_snake.config.loader import load_config
+from ai_snake.config.loader import load_config, CONFIG_FILE
 import logging
 from ai_snake.game.input_handler import InputHandler
 from ai_snake.game.state_manager import GameStateManager
@@ -65,7 +65,7 @@ class GameController:
         self.starvation_threshold = starvation_threshold if starvation_threshold is not None else 50
         
         # Load config for reward system
-        config = load_config('config/config.yaml')
+        config = load_config(CONFIG_FILE)
         
         self.speed = speed
         self.ai = ai
@@ -73,7 +73,7 @@ class GameController:
         self.ai_tracing = ai_tracing
         self.auto_advance = auto_advance
         self.high_score = self.load_high_score()
-        self.state_manager.game_state.high_score = self.high_score
+        self.game_state.high_score = self.high_score
         
         # Training stats
         self.episode_count = self._load_episode_id()  # Persistent episode ID
@@ -87,6 +87,11 @@ class GameController:
         self.input_handler = InputHandler(self)
         self.leaderboard_service = LeaderboardService()
         self.manual_teaching_mode = False
+
+    @property
+    def game_state(self):
+        """Shortcut to the underlying GameState — avoids deep chaining."""
+        return self.state_manager.game_state
     
     def load_high_score(self) -> int:
         """Load high score from file."""
@@ -106,262 +111,214 @@ class GameController:
         except IOError:
             pass  # Silently fail if we can't save
     
+    def _apply_ai_move(self):
+        """Let the active AI (rule-based or learning) choose a direction."""
+        if self.ai:
+            self.ai_manager.make_move(self.game_state)
+        elif self.learning_ai:
+            if getattr(self, 'manual_teaching_mode', False):
+                return  # manual input overrides AI
+            direction = self.ai_manager.get_action(self.game_state)
+            if direction is not None:
+                self.game_state.set_direction(direction, force=True)
+
+    def _apply_learning_step(self):
+        """Calculate reward, enforce starvation, and record a learning step."""
+        if not (self.learning_ai and self.ai_manager.learning_ai_controller):
+            return
+        lc = self.ai_manager.learning_ai_controller
+        gs = self.game_state
+        reward = lc.reward_calculator.calculate_reward(gs, gs.game_over)
+        # Starvation death logic
+        if lc.reward_calculator.moves_without_food >= lc.reward_calculator.starvation_threshold:
+            gs.set_starvation_death()
+        self.ai_manager.record_step(gs, reward, gs.game_over)
+        self.current_reward = reward
+        self.step_count = getattr(self, 'step_count', 0) + 1
+
+    def _advance_game(self, current_time: int = 0):
+        """Move the snake, detect collisions, and update high score."""
+        gs = self.game_state
+        self.state_manager.move_snake()
+        gs.check_collision(current_time)
+        # Set death type for wall/self collision if not already set
+        if gs.game_over and gs.death_type is None:
+            gs.set_other_death()
+        # Update high score
+        if gs.score > self.high_score:
+            self.high_score = gs.score
+            gs.high_score = self.high_score
+
     def update(self):
         """Update game state for one frame."""
+        self._apply_ai_move()
+
         if self.headless:
-            # No rendering, no event handling
-            if self.ai:
-                self.ai_manager.make_move(self.state_manager.game_state)
-            elif self.learning_ai:
-                if getattr(self, 'manual_teaching_mode', False):
-                    pass
-                else:
-                    direction = self.ai_manager.get_action(self.state_manager.game_state)
-                    if direction is not None:
-                        self.state_manager.game_state.set_direction(direction, force=True)
-            if self.learning_ai and self.ai_manager.learning_ai_controller:
-                reward = self.ai_manager.learning_ai_controller.reward_calculator.calculate_reward(self.state_manager.game_state, self.state_manager.game_state.game_over)
-                # STARVATION DEATH LOGIC
-                if self.ai_manager.learning_ai_controller.reward_calculator.moves_without_food >= self.ai_manager.learning_ai_controller.reward_calculator.starvation_threshold:
-                    self.state_manager.game_state.set_starvation_death()
-                self.ai_manager.record_step(self.state_manager.game_state, reward, self.state_manager.game_state.game_over)
-                self.current_reward = reward
-                if hasattr(self, 'step_count'):
-                    self.step_count += 1
-                else:
-                    self.step_count = 1
-            old_head = self.state_manager.game_state.get_snake_head()
-            self.state_manager.move_snake()
-            new_head = self.state_manager.game_state.get_snake_head()
-            current_time = 0
-            self.state_manager.game_state.check_collision(current_time)
-            # Set death type for wall/self collision
-            if self.state_manager.game_state.game_over and self.death_type is None:
-                self.state_manager.game_state.set_other_death()
-            if self.state_manager.game_state.score > getattr(self, 'high_score', 0):
-                self.high_score = self.state_manager.game_state.score
-                self.state_manager.game_state.high_score = self.high_score
+            self._advance_game(current_time=0)
+            self._apply_learning_step()
         else:
             if self.ai:
-                logger.debug('Rule-based AI making move.')
-                self.ai_manager.make_move(self.state_manager.game_state)
-            elif self.learning_ai:
-                # Check if in manual teaching mode
-                if getattr(self, 'manual_teaching_mode', False):
-                    # Manual input overrides AI in teaching mode
-                    logger.debug('Manual teaching mode - AI disabled for manual input')
-                else:
-                    logger.debug('Learning AI making move.')
-                    direction = self.ai_manager.get_action(self.state_manager.game_state)
-                    if direction is not None:
-                        self.state_manager.game_state.set_direction(direction, force=True)
-            # Store state before move for learning
-            if self.learning_ai:
-                old_score = self.state_manager.game_state.score
-            old_head = self.state_manager.game_state.get_snake_head()
-            self.state_manager.move_snake()
-            new_head = self.state_manager.game_state.get_snake_head()
-            logger.debug(f'Snake moved from {old_head} to {new_head} in direction {self.state_manager.game_state.direction}')
+                self.ai_manager.check_food_eaten(self.game_state)
             current_time = pygame.time.get_ticks()
-            self.state_manager.game_state.check_collision(current_time)
-            # Record AI events after collision detection
-            if self.ai:
-                self.ai_manager.check_food_eaten(self.state_manager.game_state)
-            # Record learning step (even during manual teaching)
-            if self.learning_ai and self.ai_manager.learning_ai_controller:
-                reward = self.ai_manager.learning_ai_controller.reward_calculator.calculate_reward(self.state_manager.game_state, self.state_manager.game_state.game_over)
-                # STARVATION DEATH LOGIC
-                if self.ai_manager.learning_ai_controller.reward_calculator.moves_without_food >= self.ai_manager.learning_ai_controller.reward_calculator.starvation_threshold:
-                    self.state_manager.game_state.set_starvation_death()
-                self.ai_manager.record_step(self.state_manager.game_state, reward, self.state_manager.game_state.game_over)
-                # Store current reward for display
-                self.current_reward = reward
-                # Track step count for episode statistics
-                if hasattr(self, 'step_count'):
-                    self.step_count += 1
-                else:
-                    self.step_count = 1
-            # Update high score if needed
-            if self.state_manager.game_state.score > self.high_score:
-                self.high_score = self.state_manager.game_state.score
-                self.state_manager.game_state.high_score = self.high_score
-                logger.info(f'New high score: {self.high_score}')
-            # Use death_type from GameState (set during collision detection)
-            if self.state_manager.game_state.game_over and self.state_manager.game_state.death_type is None:
-                self.state_manager.game_state.set_other_death()
+            self._advance_game(current_time=current_time)
+            self._apply_learning_step()
+
         
+    def _build_learning_stats(self, info: dict) -> None:
+        """Populate *info* with learning AI statistics for the stats panel."""
+        stats = self.ai_manager.get_stats()
+        episode_rewards = []
+        if self.ai_manager.learning_ai_controller is not None:
+            episode_rewards = self.ai_manager.learning_ai_controller.agent.episode_rewards
+
+        # Basic stats (always shown)
+        info['deaths'] = self.episode_count
+        info['episode'] = self.episode_count
+        info['epsilon'] = stats.get('epsilon', 1.0)
+        info['memory_size'] = stats.get('memory_size', 0)
+        info['training_step'] = stats.get('training_step', 0)
+        info['exploration_rate'] = f"{stats.get('epsilon', 1.0):.1%}"
+
+        # Episode progress indicator
+        if episode_rewards:
+            info['episode_progress'] = f"Episode {self.episode_count + 1}"
+            info['total_episodes_completed'] = len(episode_rewards)
+            info['episode_percentage'] = 100.0
+        else:
+            info['episode_progress'] = "Episode 1 (Starting)"
+            info['total_episodes_completed'] = 0
+            info['episode_percentage'] = 0
+
+        # Real-time learning info
+        info['current_reward'] = getattr(self, 'current_reward', 0)
+        info['teaching_mode'] = getattr(self, 'manual_teaching_mode', False)
+        if self.ai_manager.learning_ai_controller is not None:
+            info['learning_paused'] = not self.ai_manager.learning_ai_controller.training
+        else:
+            info['learning_paused'] = False
+
+        if not episode_rewards:
+            info.update({
+                'avg_reward': 0, 'best_reward': 0, 'recent_5_avg': 0,
+                'trend': "🔄", 'trend_status': "STARTING",
+                'learning_status': "INITIALIZING", 'success_rate': 0,
+            })
+            return
+
+        # Performance stats
+        info['avg_reward'] = stats.get('avg_reward', 0)
+        info['best_reward'] = stats.get('best_reward', 0)
+
+        n = len(episode_rewards)
+
+        # Trend analysis (requires ≥5 episodes)
+        if n >= 5:
+            recent_5 = episode_rewards[-5:]
+            recent_5_avg = sum(recent_5) / 5
+            info['recent_5_avg'] = recent_5_avg
+
+            if n >= 10:
+                previous_5_avg = sum(episode_rewards[-10:-5]) / 5
+                info['previous_5_avg'] = previous_5_avg
+                info['short_term_trend'] = recent_5_avg - previous_5_avg
+
+            if n >= 20:
+                info['recent_20_avg'] = sum(episode_rewards[-20:]) / 20
+                info['early_20_avg'] = sum(episode_rewards[:20]) / 20
+                info['long_term_improvement'] = info['recent_20_avg'] - info['early_20_avg']
+
+        if n >= 3:
+            info['last_3_avg'] = sum(episode_rewards[-3:]) / 3
+            info['last_episode'] = episode_rewards[-1]
+            info['second_last_episode'] = episode_rewards[-2] if n >= 2 else 0
+            info['third_last_episode'] = episode_rewards[-3] if n >= 3 else 0
+            info['trend'] = "📈" if episode_rewards[-1] > episode_rewards[-3] else "📉"
+
+            if n >= 5 and 'previous_5_avg' in info:
+                if info['recent_5_avg'] > info['previous_5_avg']:
+                    info['trend_status'], info['trend_color'] = "IMPROVING", "green"
+                elif info['recent_5_avg'] < info['previous_5_avg']:
+                    info['trend_status'], info['trend_color'] = "DECLINING", "red"
+                else:
+                    info['trend_status'], info['trend_color'] = "STABLE", "yellow"
+
+        # Learning speed
+        if n >= 10:
+            learning_speed = sum(episode_rewards[-10:]) / 10 - sum(episode_rewards[:10]) / 10
+            info['learning_speed'] = learning_speed
+            if learning_speed > 5:
+                info['learning_status'] = "FAST"
+            elif learning_speed > 0:
+                info['learning_status'] = "STEADY"
+            else:
+                info['learning_status'] = "SLOW"
+
+        info['total_episodes'] = n
+        info['current_episode'] = self.episode_count
+
+        positive_episodes = sum(1 for r in episode_rewards if r > 0)
+        info['success_rate'] = (positive_episodes / n) * 100
+        info['avg_food_per_episode'] = sum(episode_rewards) / n / 50  # Rough estimate
+
+    def _build_render_info(self) -> dict:
+        """Build the info dict consumed by the renderer."""
+        info = {
+            'score': self.game_state.score,
+            'high_score': self.high_score,
+            'speed': self.speed,
+        }
+        if self.learning_ai:
+            info['mode'] = 'Learning AI'
+            if self.model_path:
+                info['model'] = self.model_path
+            self._build_learning_stats(info)
+        elif self.ai:
+            info['mode'] = 'Rule-based AI'
+        else:
+            info['mode'] = 'Manual'
+
+        info['controls'] = [
+            'Arrow keys: Move', 'T: Toggle AI', 'L: Toggle Learning AI',
+            'M: Toggle Manual Teaching Mode', 'P: Toggle Learning Pause',
+            'S: Save Model', 'Q: Quit Game', '+/-: Speed',
+        ]
+        return info
+
     def render(self):
         """Render the current game state."""
         if self.headless:
             return
         current_time = pygame.time.get_ticks()
-        # Build info dict for the info area
-        info = {
-            'score': self.state_manager.game_state.score,
-            'high_score': self.high_score,
-            'speed': self.speed,
-        }
-        # Determine mode and model
-        if self.learning_ai:
-            info['mode'] = 'Learning AI'
-            if self.model_path:
-                info['model'] = self.model_path
-            # Add learning stats (always show, even before first death)
-            stats = self.ai_manager.get_stats()
-            episode_rewards = []
-            if self.ai_manager.learning_ai_controller is not None:
-                episode_rewards = self.ai_manager.learning_ai_controller.agent.episode_rewards
-            # Always show basic stats
-            info['deaths'] = self.episode_count
-            info['episode'] = self.episode_count
-            info['epsilon'] = stats.get('epsilon', 1.0)
-            info['memory_size'] = stats.get('memory_size', 0)
-            info['training_step'] = stats.get('training_step', 0)
-            info['exploration_rate'] = f"{stats.get('epsilon', 1.0):.1%}"
-            # Add episode progress indicator
-            if episode_rewards:
-                info['episode_progress'] = f"Episode {self.episode_count + 1}"
-                info['total_episodes_completed'] = len(episode_rewards)
-                info['episode_percentage'] = (len(episode_rewards) / max(1, len(episode_rewards))) * 100
-            else:
-                info['episode_progress'] = "Episode 1 (Starting)"
-                info['total_episodes_completed'] = 0
-                info['episode_percentage'] = 0
-            # Add real-time learning info
-            info['current_reward'] = getattr(self, 'current_reward', 0)
-            info['teaching_mode'] = getattr(self, 'manual_teaching_mode', False)
-            if self.ai_manager.learning_ai_controller is not None:
-                info['learning_paused'] = not self.ai_manager.learning_ai_controller.training
-            else:
-                info['learning_paused'] = False
-            # Performance stats (only if we have data)
-            if episode_rewards:
-                info['avg_reward'] = stats.get('avg_reward', 0)
-                info['best_reward'] = stats.get('best_reward', 0)
-                
-                # Enhanced trend analysis
-                if len(episode_rewards) >= 5:
-                    # Recent vs previous comparison
-                    recent_5 = episode_rewards[-5:]
-                    recent_5_avg = sum(recent_5) / len(recent_5)
-                    info['recent_5_avg'] = recent_5_avg
-                    
-                    if len(episode_rewards) >= 10:
-                        previous_5 = episode_rewards[-10:-5]
-                        previous_5_avg = sum(previous_5) / len(previous_5)
-                        info['previous_5_avg'] = previous_5_avg
-                        info['short_term_trend'] = recent_5_avg - previous_5_avg
-                    
-                    # Long-term trend (if we have enough data)
-                    if len(episode_rewards) >= 20:
-                        recent_20 = episode_rewards[-20:]
-                        early_20 = episode_rewards[:20]
-                        info['recent_20_avg'] = sum(recent_20) / len(recent_20)
-                        info['early_20_avg'] = sum(early_20) / len(early_20)
-                        info['long_term_improvement'] = info['recent_20_avg'] - info['early_20_avg']
-                    
-                    # Episode-by-episode progress
-                    if len(episode_rewards) >= 3:
-                        last_3 = episode_rewards[-3:]
-                        info['last_3_avg'] = sum(last_3) / len(last_3)
-                        info['last_episode'] = episode_rewards[-1]
-                        info['second_last_episode'] = episode_rewards[-2] if len(episode_rewards) >= 2 else 0
-                        info['third_last_episode'] = episode_rewards[-3] if len(episode_rewards) >= 3 else 0
-                    
-                    # Trend indicators
-                    if len(episode_rewards) >= 3:
-                        recent_trend = "📈" if episode_rewards[-1] > episode_rewards[-3] else "📉"
-                        info['trend'] = recent_trend
-                        
-                        # More detailed trend analysis
-                        if len(episode_rewards) >= 5:
-                            if 'previous_5_avg' in info and recent_5_avg > info['previous_5_avg']:
-                                info['trend_status'] = "IMPROVING"
-                                info['trend_color'] = "green"
-                            elif 'previous_5_avg' in info and recent_5_avg < info['previous_5_avg']:
-                                info['trend_status'] = "DECLINING"
-                                info['trend_color'] = "red"
-                            else:
-                                info['trend_status'] = "STABLE"
-                                info['trend_color'] = "yellow"
-                    
-                    # Learning speed indicator
-                    if len(episode_rewards) >= 10:
-                        first_10_avg = sum(episode_rewards[:10]) / 10
-                        last_10_avg = sum(episode_rewards[-10:]) / 10
-                        learning_speed = last_10_avg - first_10_avg
-                        info['learning_speed'] = learning_speed
-                        
-                        if learning_speed > 5:
-                            info['learning_status'] = "FAST"
-                        elif learning_speed > 0:
-                            info['learning_status'] = "STEADY"
-                        else:
-                            info['learning_status'] = "SLOW"
-                
-                # Episode count and progress
-                info['total_episodes'] = len(episode_rewards)
-                info['current_episode'] = self.episode_count
-                
-                # Success rate (episodes with positive rewards)
-                positive_episodes = sum(1 for r in episode_rewards if r > 0)
-                info['success_rate'] = (positive_episodes / len(episode_rewards)) * 100 if episode_rewards else 0
-                
-                # Food collection stats
-                info['avg_food_per_episode'] = sum(episode_rewards) / len(episode_rewards) / 50 if episode_rewards else 0  # Rough estimate
-            else:
-                # Default values for first episode
-                info['avg_reward'] = 0
-                info['best_reward'] = 0
-                info['recent_5_avg'] = 0
-                info['trend'] = "🔄"
-                info['trend_status'] = "STARTING"
-                info['learning_status'] = "INITIALIZING"
-                info['success_rate'] = 0
-        elif self.ai:
-            info['mode'] = 'Rule-based AI'
-        else:
-            info['mode'] = 'Manual'
-        # Controls/help
-        info['controls'] = [
-            'Arrow keys: Move',
-            'T: Toggle AI',
-            'L: Toggle Learning AI',
-            'M: Toggle Manual Teaching Mode',
-            'P: Toggle Learning Pause',
-            'S: Save Model',
-            'Q: Quit Game',
-            '+/-: Speed'
-        ]
+        info = self._build_render_info()
         # Only call GameRenderer methods/attributes if renderer is GameRenderer
         from ai_snake.render.renderer import GameRenderer
         if isinstance(self.renderer, GameRenderer):
-            self.renderer.render(self.state_manager.game_state, current_time, info)
+            self.renderer.render(self.game_state, current_time, info)
         else:
-            self.renderer.render(self.state_manager.game_state, current_time, info)
+            self.renderer.render(self.game_state, current_time, info)
     
     def reset(self):
         """Reset the game to initial state."""
         # Log death for rule-based AI before reset
         if self.ai and hasattr(self.ai_manager, 'ai_controller'):
-            death_type = str(self.state_manager.game_state.death_type) if self.state_manager.game_state.death_type else "unknown"
+            death_type = str(self.game_state.death_type) if self.game_state.death_type else "unknown"
             move_count = getattr(self.ai_manager.ai_controller, 'move_count', 0)
             self.ai_manager.ai_controller.log_death(death_type, move_count)
             self.ai_manager.ai_controller.reset_stats()
         # Record episode end for learning AI
         if self.learning_ai:
-            self.ai_manager.record_episode_end(self.state_manager.game_state.score, death_type=str(self.state_manager.game_state.death_type) if self.state_manager.game_state.death_type else "unknown")
+            self.ai_manager.record_episode_end(self.game_state.score, death_type=str(self.game_state.death_type) if self.game_state.death_type else "unknown")
             # Increment persistent episode ID
             self.episode_count += 1
             self._save_episode_id(self.episode_count)
-            self.total_food_eaten += self.state_manager.game_state.score // 10  # Assuming 10 points per food
+            self.total_food_eaten += self.game_state.score // 10  # Assuming 10 points per food
             if self.ai_manager.learning_ai_controller:
                 self.ai_manager.learning_ai_controller.reward_calculator.reset()
             # Get the reward for the just-finished episode
             last_reward = 0
             if self.ai_manager.learning_ai_controller and self.ai_manager.learning_ai_controller.agent.episode_rewards:
                 last_reward = self.ai_manager.learning_ai_controller.agent.episode_rewards[-1]
-            death_type = str(self.state_manager.game_state.death_type) if self.state_manager.game_state.death_type else "other"
+            death_type = str(self.game_state.death_type) if self.game_state.death_type else "other"
             # Add to both leaderboards using the persistent episode_count
             # Determine if this is a session high score by comparing reward with session's highest reward
             session_entries = self.leaderboard_service.get_session_entries()
@@ -369,7 +326,7 @@ class GameController:
             high_score_flag = last_reward >= session_highest_reward and last_reward > 0
             self.leaderboard_service.add_entry(self.episode_count, last_reward, death_type, high_score=high_score_flag)
             # Auto-save based on config settings
-            config = load_config('config/config.yaml')
+            config = load_config(CONFIG_FILE)
             auto_save_enabled = config['learning'].get('auto_save_enabled', True)
             auto_save_interval = config['learning'].get('auto_save_interval', 1)  # Default to every episode
             auto_save_filename = config['learning'].get('auto_save_filename', 'snake_dqn_model_auto.pth')
@@ -377,7 +334,7 @@ class GameController:
                 self.ai_manager.save_model(auto_save_filename)
         # Reset step counter for new episode
         self.step_count = 0
-        self.state_manager.game_state.reset()
+        self.game_state.reset()
         self.death_type = None  # Reset death_type for new episode
     
     def run_game_loop(self) -> bool:
@@ -397,10 +354,10 @@ class GameController:
 
             # Headless mode: run episodes forever (caller can Ctrl+C to stop).
             while True:
-                while not self.state_manager.game_state.game_over:
+                while not self.game_state.game_over:
                     self.update()
 
-                if self.state_manager.game_state.score > self.high_score:
+                if self.game_state.score > self.high_score:
                     self.save_high_score()
 
                 if self.learning_ai and self.ai_manager.learning_ai_controller is not None:
@@ -424,22 +381,29 @@ class GameController:
 
                 self.reset()
         else:
-            while not self.state_manager.game_state.game_over:
-                for event in pygame.event.get():
-                    if not self.input_handler.handle_input(event):
-                        if self.learning_ai:
-                            self.print_learning_report()
-                        return False
-                self.update()
-                self.render()
-                if not self.headless and self.clock is not None:
-                    self.clock.tick(self.speed)
-        # Game over - restart immediately
-        if self.state_manager.game_state.score > self.high_score:
-            self.save_high_score()
-        # Auto-restart (no game over screen)
-        self.reset()
-        return self.run_game_loop()
+            # Interactive mode
+            running = True
+            while running:
+                # Main game loop
+                while not self.game_state.game_over:
+                    for event in pygame.event.get():
+                        if not self.input_handler.handle_input(event):
+                            if self.learning_ai:
+                                self.print_learning_report()
+                            return False
+                    self.update()
+                    self.render()
+                    if not self.headless and self.clock is not None:
+                        self.clock.tick(self.speed)
+                
+                # Game over handling
+                if self.game_state.score > self.high_score:
+                    self.save_high_score()
+                
+                # Auto-restart (no game over screen)
+                self.reset()
+                
+            return False
     
     def print_learning_report(self):
         """Print a comprehensive learning analysis report."""
@@ -536,19 +500,23 @@ class GameController:
         print("="*60 + "\n")
         
         # Print detailed game analysis if learning AI was used
-        if self.learning_ai:
-            try:
-                if log_file_path and os.path.exists(log_file_path):
-                    print_game_analysis(log_file_path)
-            except Exception as e:
-                print(f"Could not analyze game log: {e}")
+        if self.ai_manager.learning_ai_controller:
+            stats = self.ai_manager.learning_ai_controller.episode_stats
+            if stats:
+                print(f"\n💀 DEATH TYPE BREAKDOWN:")
+                death_types = {}
+                for ep in stats:
+                    dt = ep.get('death_type', 'unknown')
+                    death_types[dt] = death_types.get(dt, 0) + 1
+                for dt, count in sorted(death_types.items(), key=lambda x: x[1], reverse=True):
+                    print(f"   {dt.capitalize()}: {count} ({count/len(stats):.1%})")
     
     def get_settings(self) -> dict:
         """Get current game settings."""
         from ai_snake.render.renderer import GameRenderer
         settings = {
             'speed': self.speed,
-            'grid': (self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height),
+            'grid': (self.game_state.grid_width, self.game_state.grid_height),
         }
         if isinstance(self.renderer, GameRenderer):
             settings['nes'] = self.renderer.nes_mode
@@ -559,8 +527,8 @@ class GameController:
     def update_settings(self, settings: dict):
         """Update game settings."""
         self.speed = settings.get('speed', self.speed)
-        grid = settings.get('grid', (self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height))
-        self.state_manager.game_state.grid_width, self.state_manager.game_state.grid_height = grid
+        grid = settings.get('grid', (self.game_state.grid_width, self.game_state.grid_height))
+        self.game_state.grid_width, self.game_state.grid_height = grid
         from ai_snake.render.renderer import GameRenderer
         if isinstance(self.renderer, GameRenderer):
             self.renderer.set_grid_size(grid[0], grid[1])

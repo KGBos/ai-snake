@@ -37,18 +37,33 @@ class GameState:
     
     def spawn_food(self):
         """Spawn food at a random location not occupied by the snake."""
-        if len(self.snake) >= self.grid_width * self.grid_height:
+        total_cells = self.grid_width * self.grid_height
+        if len(self.snake) >= total_cells:
             self.game_over = True
             self.death_type = 'grid_full'  # Snake filled entire grid
             return
-        
-        while True:
-            self.food = (
-                random.randint(0, self.grid_width - 1),
-                random.randint(0, self.grid_height - 1)
-            )
-            if self.food not in self.snake:
-                break
+
+        # When the snake is small, random retries are fast (few collisions).
+        # When the snake is large, compute the set of free cells instead.
+        if len(self.snake) < total_cells * 0.5:
+            snake_set = set(self.snake)
+            while True:
+                pos = (
+                    random.randint(0, self.grid_width - 1),
+                    random.randint(0, self.grid_height - 1),
+                )
+                if pos not in snake_set:
+                    self.food = pos
+                    return
+        else:
+            snake_set = set(self.snake)
+            free_cells = [
+                (x, y)
+                for x in range(self.grid_width)
+                for y in range(self.grid_height)
+                if (x, y) not in snake_set
+            ]
+            self.food = random.choice(free_cells)
     
     def move_snake(self):
         """Move the snake in the current direction."""

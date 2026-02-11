@@ -193,14 +193,14 @@ class DQNAgent:
                 queue.append(nxt)
         return False
     
-    def get_action(self, game_state, training: bool = True) -> int:
+    def get_action(self, game_state, state_tensor: Optional[torch.Tensor] = None, training: bool = True) -> int:
         """Get action using epsilon-greedy policy."""
         if training and random.random() < self.epsilon:
             # Random action
             return random.randint(0, 3)
         
         # Get Q-values from network
-        state = self.get_state_representation(game_state)
+        state = state_tensor if state_tensor is not None else self.get_state_representation(game_state)
         with torch.no_grad():
             q_values = self.q_network(state)
         
@@ -278,7 +278,7 @@ class DQNAgent:
     def load_model(self, filepath: str):
         """Load a trained model."""
         if os.path.exists(filepath):
-            checkpoint = torch.load(filepath, map_location=self.device)
+            checkpoint = torch.load(filepath, map_location=self.device, weights_only=True)
             self.q_network.load_state_dict(checkpoint['q_network_state_dict'])
             self.target_network.load_state_dict(checkpoint['target_network_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

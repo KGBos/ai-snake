@@ -1,19 +1,37 @@
 [
   {
+    "episode": 5149,
+    "reward": 3554.699999999998,
+    "death_type": "wall",
+    "timestamp": 1770780586.760933,
+    "previous_rank": 1,
+    "rank_change": 0,
+    "high_score": true
+  },
+  {
+    "episode": 5059,
+    "reward": 3286.2500000000036,
+    "death_type": "self",
+    "timestamp": 1770779969.475643,
+    "previous_rank": 2,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
     "episode": 4747,
     "reward": 3141.7900000000045,
     "death_type": "self",
     "timestamp": 1752043436.862986,
-    "previous_rank": 1,
+    "previous_rank": 3,
     "rank_change": 0,
-    "high_score": true
+    "high_score": false
   },
   {
     "episode": 1986,
     "reward": 3139.465000000007,
     "death_type": "self",
     "timestamp": 1751955653.802614,
-    "previous_rank": 2,
+    "previous_rank": 4,
     "rank_change": 0,
     "high_score": false
   },
@@ -22,7 +40,16 @@
     "reward": 2426.219999999999,
     "death_type": "self",
     "timestamp": 1752043383.421818,
-    "previous_rank": 3,
+    "previous_rank": 5,
+    "rank_change": 0,
+    "high_score": false
+  },
+  {
+    "episode": 5145,
+    "reward": 2402.3699999999985,
+    "death_type": "self",
+    "timestamp": 1770780166.351885,
+    "previous_rank": 6,
     "rank_change": 0,
     "high_score": false
   },
@@ -31,7 +58,7 @@
     "reward": 2332.8199999999993,
     "death_type": "self",
     "timestamp": 1751955605.64136,
-    "previous_rank": 4,
+    "previous_rank": 7,
     "rank_change": 0,
     "high_score": false
   },
@@ -40,7 +67,7 @@
     "reward": 2310.7890000000025,
     "death_type": "self",
     "timestamp": 1751955632.22538,
-    "previous_rank": 5,
+    "previous_rank": 8,
     "rank_change": 0,
     "high_score": false
   },
@@ -49,7 +76,7 @@
     "reward": 2304.6070000000013,
     "death_type": "self",
     "timestamp": 1751955649.254814,
-    "previous_rank": 6,
+    "previous_rank": 9,
     "rank_change": 0,
     "high_score": false
   },
@@ -58,33 +85,6 @@
     "reward": 2289.1499999999987,
     "death_type": "self",
     "timestamp": 1752043423.267858,
-    "previous_rank": 7,
-    "rank_change": 0,
-    "high_score": false
-  },
-  {
-    "episode": 1862,
-    "reward": 2285.091000000001,
-    "death_type": "self",
-    "timestamp": 1751955558.194223,
-    "previous_rank": 8,
-    "rank_change": 0,
-    "high_score": false
-  },
-  {
-    "episode": 4824,
-    "reward": 2231.1399999999976,
-    "death_type": "self",
-    "timestamp": 1752043493.161382,
-    "previous_rank": 9,
-    "rank_change": 0,
-    "high_score": false
-  },
-  {
-    "episode": 1694,
-    "reward": 2197.9059999999968,
-    "death_type": "self",
-    "timestamp": 1751955452.190211,
     "previous_rank": 10,
     "rank_change": 0,
     "high_score": false
