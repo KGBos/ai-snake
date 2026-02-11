@@ -2,8 +2,13 @@ import sys
 import argparse
 import os
 import logging
+
+# Ensure imports work when running from source checkout (package lives under ../src).
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+src_root = os.path.join(repo_root, 'src')
+sys.path.insert(0, src_root)
+
 from ai_snake.utils.logging_utils import setup_logging
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pygame
 from ai_snake.game.game_controller import GameController

@@ -9,7 +9,6 @@ from typing import Optional, Tuple
 from ai_snake.game.models import GameState
 from ai_snake.render.renderer import GameRenderer
 from ai_snake.render.headless import HeadlessRenderer
-from ai_snake.render.web import WebRenderer
 from ai_snake.render.base import BaseRenderer
 from ai_snake.ai.rule_based import AIController
 from ai_snake.ai.learning import LearningAIController, RewardCalculator, print_game_analysis, log_file_path
@@ -53,6 +52,8 @@ class GameController:
             self.renderer = HeadlessRenderer()
             self.clock = None
         elif self.web:
+            # Lazy import so Flask is only required for web mode.
+            from ai_snake.render.web import WebRenderer
             self.renderer = WebRenderer()
             self.clock = None
         else:
@@ -382,41 +383,46 @@ class GameController:
     def run_game_loop(self) -> bool:
         """Run the main game loop. Returns True if game should continue, False to quit."""
         if self.headless:
-            # Guarantee logging prints to console in headless mode
+            # Guarantee logging prints to console in headless mode (configure once).
             root_logger = logging.getLogger()
-            for handler in root_logger.handlers[:]:
-                root_logger.removeHandler(handler)
-            console_handler = logging.StreamHandler(sys.stdout)
-            console_handler.setFormatter(logging.Formatter('[HEADLESS] %(message)s'))
-            root_logger.addHandler(console_handler)
-            root_logger.setLevel(logging.INFO)
-            # TEST LOG: Confirm headless logger is active
-            logger.info('Headless mode logger active. Only [HEADLESS] stats will be shown.')
-            # Headless mode: no rendering, no event handling, run as fast as possible
-            while not self.state_manager.game_state.game_over:
-                self.update()
-            # Game over - restart immediately
-            if self.state_manager.game_state.score > self.high_score:
-                self.save_high_score()
-            # Remove print_performance_report call (does not exist)
-            # --- HEADLESS MODE LOGGING OUTPUT ---
-            if self.learning_ai and self.ai_manager.learning_ai_controller is not None:
-                episode_count = self.episode_count
-                episode_rewards = self.ai_manager.learning_ai_controller.agent.episode_rewards
-                if episode_rewards:
-                    current_reward = episode_rewards[-1]
-                    avg_reward = sum(episode_rewards) / len(episode_rewards)
-                    top_reward = max(episode_rewards)
-                else:
-                    current_reward = 0
-                    avg_reward = 0
-                    top_reward = 0
-                highlight = ''
-                if current_reward == top_reward and len(episode_rewards) > 1:
-                    highlight = ' *** NEW HIGH SCORE! ***'
-                logger.info(f"Episode: {episode_count} | Current reward: {current_reward:.2f} | Avg reward: {avg_reward:.2f} | High: {top_reward:.2f}{highlight}")
-            self.reset()
-            return self.run_game_loop()
+            if not getattr(self, "_headless_logging_configured", False):
+                for handler in root_logger.handlers[:]:
+                    root_logger.removeHandler(handler)
+                console_handler = logging.StreamHandler(sys.stdout)
+                console_handler.setFormatter(logging.Formatter('[HEADLESS] %(message)s'))
+                root_logger.addHandler(console_handler)
+                root_logger.setLevel(logging.INFO)
+                self._headless_logging_configured = True
+                logger.info('Headless mode logger active. Only [HEADLESS] stats will be shown.')
+
+            # Headless mode: run episodes forever (caller can Ctrl+C to stop).
+            while True:
+                while not self.state_manager.game_state.game_over:
+                    self.update()
+
+                if self.state_manager.game_state.score > self.high_score:
+                    self.save_high_score()
+
+                if self.learning_ai and self.ai_manager.learning_ai_controller is not None:
+                    episode_count = self.episode_count
+                    episode_rewards = self.ai_manager.learning_ai_controller.agent.episode_rewards
+                    if episode_rewards:
+                        current_reward = episode_rewards[-1]
+                        avg_reward = sum(episode_rewards) / len(episode_rewards)
+                        top_reward = max(episode_rewards)
+                    else:
+                        current_reward = 0
+                        avg_reward = 0
+                        top_reward = 0
+                    highlight = ''
+                    if current_reward == top_reward and len(episode_rewards) > 1:
+                        highlight = ' *** NEW HIGH SCORE! ***'
+                    logger.info(
+                        f"Episode: {episode_count} | Current reward: {current_reward:.2f} | "
+                        f"Avg reward: {avg_reward:.2f} | High: {top_reward:.2f}{highlight}"
+                    )
+
+                self.reset()
         else:
             while not self.state_manager.game_state.game_over:
                 for event in pygame.event.get():

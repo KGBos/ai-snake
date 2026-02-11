@@ -154,16 +154,44 @@ class DQNAgent:
         return 0.0
     
     def _can_reach_food(self, game_state, head, food, snake_body) -> bool:
-        """Simple check if there's a path to food."""
-        # Basic check: if food is reachable without hitting walls or snake
-        if food in snake_body:
-            return False
-        
-        # Check if food is in a valid position
+        """Return True if food is reachable from head via empty cells (4-neighborhood BFS).
+
+        This is an approximation of true reachability because the snake's tail may move.
+        To reduce false negatives, we treat the tail cell as empty when the snake is not
+        currently growing (since the tail will vacate on the next move).
+        """
+        # Quick rejects
         if not (0 <= food[0] < game_state.grid_width and 0 <= food[1] < game_state.grid_height):
             return False
-        
-        return True
+        if food in snake_body:
+            return False
+
+        width, height = game_state.grid_width, game_state.grid_height
+
+        # Everything except the head is an obstacle; optionally allow stepping into the tail.
+        obstacles = set(snake_body[1:])
+        if snake_body and not getattr(game_state, "grow", False):
+            obstacles.discard(snake_body[-1])
+
+        if head == food:
+            return True
+
+        queue = deque([head])
+        visited = {head}
+        while queue:
+            x, y = queue.popleft()
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = x + dx, y + dy
+                nxt = (nx, ny)
+                if not (0 <= nx < width and 0 <= ny < height):
+                    continue
+                if nxt in obstacles or nxt in visited:
+                    continue
+                if nxt == food:
+                    return True
+                visited.add(nxt)
+                queue.append(nxt)
+        return False
     
     def get_action(self, game_state, training: bool = True) -> int:
         """Get action using epsilon-greedy policy."""
@@ -272,4 +300,5 @@ class DQNAgent:
             'avg_reward': np.mean(self.episode_rewards[-100:]) if self.episode_rewards else 0,
             'avg_length': np.mean(self.episode_lengths[-100:]) if self.episode_lengths else 0,
             'best_reward': max(self.episode_rewards) if self.episode_rewards else 0
-        } 
+        }
+
