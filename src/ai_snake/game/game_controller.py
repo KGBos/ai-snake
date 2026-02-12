@@ -60,9 +60,16 @@ class GameController:
             self.renderer = GameRenderer(nes_mode=nes_mode, headless=headless)
             self.clock = pygame.time.Clock()
         self.state_manager = GameStateManager(grid[0], grid[1])
-        self.ai_manager = AIManager(grid_size=grid, ai_tracing=ai_tracing, learning_ai=learning_ai, model_path=model_path, log_to_file=log_to_file)
-        self.model_path = model_path  # Store model_path for info area
         self.starvation_threshold = starvation_threshold if starvation_threshold is not None else 50
+        self.ai_manager = AIManager(
+            grid_size=grid,
+            ai_tracing=ai_tracing,
+            learning_ai=learning_ai,
+            model_path=model_path,
+            starvation_threshold=self.starvation_threshold,
+            log_to_file=log_to_file,
+        )
+        self.model_path = model_path  # Store model_path for info area
         self.log_to_file = log_to_file
         
         # Load config for reward system
@@ -131,8 +138,9 @@ class GameController:
         gs = self.game_state
         reward = lc.reward_calculator.calculate_reward(gs, gs.game_over)
         # Starvation death logic
-        if lc.reward_calculator.moves_without_food >= lc.reward_calculator.starvation_threshold:
+        if (not gs.game_over) and lc.reward_calculator.moves_without_food >= lc.reward_calculator.starvation_threshold:
             gs.set_starvation_death()
+            reward += lc.reward_calculator.death_penalty
         self.ai_manager.record_step(gs, reward, gs.game_over)
         self.current_reward = reward
         self.step_count = getattr(self, 'step_count', 0) + 1
@@ -308,10 +316,8 @@ class GameController:
             self.ai_manager.ai_controller.reset_stats()
         # Record episode end for learning AI
         if self.learning_ai:
+            completed_episode = self.episode_count
             self.ai_manager.record_episode_end(self.game_state.score, death_type=str(self.game_state.death_type) if self.game_state.death_type else "unknown")
-            # Increment persistent episode ID
-            self.episode_count += 1
-            self._save_episode_id(self.episode_count)
             self.total_food_eaten += self.game_state.score // 10  # Assuming 10 points per food
             if self.ai_manager.learning_ai_controller:
                 self.ai_manager.learning_ai_controller.reward_calculator.reset()
@@ -325,14 +331,17 @@ class GameController:
             session_entries = self.leaderboard_service.get_session_entries()
             session_highest_reward = max([entry.get('reward', 0) for entry in session_entries]) if session_entries else 0
             high_score_flag = last_reward >= session_highest_reward and last_reward > 0
-            self.leaderboard_service.add_entry(self.episode_count, last_reward, death_type, high_score=high_score_flag)
+            self.leaderboard_service.add_entry(completed_episode, last_reward, death_type, high_score=high_score_flag)
             # Auto-save based on config settings
             config = load_config(CONFIG_FILE)
             auto_save_enabled = config['learning'].get('auto_save_enabled', True)
             auto_save_interval = config['learning'].get('auto_save_interval', 1)  # Default to every episode
             auto_save_filename = config['learning'].get('auto_save_filename', 'snake_dqn_model_auto.pth')
-            if auto_save_enabled and self.episode_count % auto_save_interval == 0:
+            if auto_save_enabled and completed_episode % auto_save_interval == 0:
                 self.ai_manager.save_model(auto_save_filename)
+            # Increment persistent episode ID after processing the finished episode.
+            self.episode_count += 1
+            self._save_episode_id(self.episode_count)
         # Reset step counter for new episode
         self.step_count = 0
         self.game_state.reset()
