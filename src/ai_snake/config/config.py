@@ -32,9 +32,9 @@ def _init_fonts():
     import pygame
     if not pygame.get_init():
         pygame.init()
-    _FONT = pygame.font.SysFont('Arial', 24)
-    _FONT_SMALL = pygame.font.SysFont('Arial', 16)
-    _RETRO_FONT = pygame.font.SysFont('Courier', 16, bold=True)
+    _FONT = pygame.font.SysFont('DejaVu Sans', 24)
+    _FONT_SMALL = pygame.font.SysFont('DejaVu Sans', 16)
+    _RETRO_FONT = pygame.font.SysFont('Liberation Mono', 16, bold=True)
     _fonts_initialized = True
 
 

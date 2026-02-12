@@ -259,7 +259,7 @@ class DQNAgent:
             self.target_network.load_state_dict(self.q_network.state_dict())
         
         # Decay epsilon
-            self.epsilon *= self.epsilon_decay
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
             
         return loss.item(), current_q_values.mean().item()
     
@@ -302,4 +302,3 @@ class DQNAgent:
             'avg_length': np.mean(self.episode_lengths[-100:]) if self.episode_lengths else 0,
             'best_reward': max(self.episode_rewards) if self.episode_rewards else 0
         }
-

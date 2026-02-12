@@ -196,4 +196,17 @@ training_output_*/
 training_log.txt
 
 # Ignore all __pycache__ folders recursively
-**/__pycache__/ 
+**/__pycache__/
+
+# Weights & Biases
+wandb/
+
+# Dashboard Data
+dashboard_data.json
+dashboard_data.json.tmp
+
+# Game Logs & Data
+logs/
+episode_id.txt
+*.mp4
+*.gif 

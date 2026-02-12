@@ -1,4 +1,5 @@
 # FIXME: Review this file for potential issues or improvements
+import os
 import pygame
 import logging
 from typing import Tuple, Optional, List, Dict
@@ -46,23 +47,35 @@ class GameRenderer(BaseRenderer):
         
         # Calculate panel widths based on content
         self._calculate_panel_widths()
+
+        # Visual palette for improved contrast and readability.
+        self.ui_colors = {
+            'bg': (9, 12, 18),
+            'panel_bg': (16, 21, 30),
+            'panel_edge': (49, 62, 84),
+            'text_primary': (235, 241, 255),
+            'text_muted': (161, 176, 204),
+            'teal': (109, 214, 212),
+            'gold': (243, 207, 109),
+            'success': (116, 222, 146),
+            'warn': (255, 206, 117),
+            'danger': (241, 130, 130),
+        }
     
     def _calculate_panel_widths(self):
         """Calculate optimal panel widths based on content."""
         # Estimate left panel width (telemetry)
         telemetry_lines = [
-            "Episodes: 999",
-            "Episode: Episode 999 (Starting)",
-            "Training Steps: 99999",
-            "Memory: 99999",
-            "Exploration: 99.9%",
-            "Current Reward: 999.99",
-            "Best Reward: 999.99",
-            "Recent 5 Avg: 999.99",
-            "Status: IMPROVING",
-            "Learning: FAST",
-            "Success Rate: 99.9%",
-            "Avg Food: 99.99"
+            "Score   999",
+            "Mode    Learning AI",
+            "Episode 9999",
+            "Train   999999",
+            "Buffer  999999",
+            "Epsilon 99.9%",
+            "Reward  +999.99",
+            "Trend   IMPROVING",
+            "Success 99.9%",
+            "Food/Ep 99.99",
         ]
         
         max_telemetry_width = 0
@@ -72,9 +85,9 @@ class GameRenderer(BaseRenderer):
         
         # Estimate right panel width (leaderboard)
         leaderboard_lines = [
-            "1. Episode 999 - 999 (WALL) ↑ +2",
-            "2. Episode 999 - 999 (SELF) ↓ -1",
-            "3. Episode 999 - 999 (STARVE) → NEW"
+            "#10 E9999 R+999.99 SELF ↑+9 ★",
+            "#10 E9999 R+999.99 WALL ↓-9",
+            "#10 E9999 R+999.99 STARVE →NEW",
         ]
         
         max_leaderboard_width = 0
@@ -122,6 +135,8 @@ class GameRenderer(BaseRenderer):
         rect = pygame.Rect(ox + x * self.cell_size, oy + y * self.cell_size,
                           self.cell_size, self.cell_size)
         pygame.draw.rect(self.screen, color, rect, border_radius=4)
+        if self.cell_size >= 8:
+            pygame.draw.rect(self.screen, (12, 18, 28), rect, 1, border_radius=4)
         if self.nes_mode:
             pygame.draw.rect(self.screen, WHITE, rect, 1)
     
@@ -141,21 +156,56 @@ class GameRenderer(BaseRenderer):
     
     def draw_snake(self, snake_body: list, learning_status: str = "normal"):
         """Draw the snake body with colored head based on learning status."""
+        body_len = max(1, len(snake_body) - 1)
         for i, segment in enumerate(snake_body):
             if i == 0:  # Snake head
                 if learning_status == "teaching":
-                    color = (255, 255, 0)  # Yellow for teaching mode
+                    color = (255, 233, 112)
                 elif learning_status == "paused":
-                    color = (255, 100, 100)  # Red for learning paused
+                    color = (242, 124, 124)
                 else:
-                    color = (100, 255, 100)  # Green for normal learning
+                    color = (120, 231, 147)
             else:
-                color = GREEN  # Body segments stay green
+                shade = int(140 - (i / body_len) * 45)
+                color = (52, max(80, shade + 40), max(95, shade))
             self.draw_cell(segment, color)
     
     def draw_food(self, food_pos: Tuple[int, int]):
         """Draw the food."""
         self.draw_cell(food_pos, RED)
+        if self.cell_size is None or self.headless or self.screen is None:
+            return
+        if self.cell_size < 8:
+            return
+        ox, oy = self.grid_origin
+        x, y = food_pos
+        cx = ox + x * self.cell_size + self.cell_size // 2
+        cy = oy + y * self.cell_size + self.cell_size // 2
+        pygame.draw.circle(self.screen, (255, 214, 214), (cx, cy), max(1, self.cell_size // 6))
+
+    def _draw_section_header(self, title: str, x: int, y: int, accent: Tuple[int, int, int]) -> int:
+        title_surf = FONT.render(title, True, accent)
+        self.screen.blit(title_surf, (x, y))
+        y += title_surf.get_height() + 2
+        pygame.draw.line(self.screen, self.ui_colors['panel_edge'], (x, y), (x + 220, y), 1)
+        return y + 8
+
+    def _draw_key_value(self, x: int, y: int, key: str, value: str, value_color: Optional[Tuple[int, int, int]] = None) -> int:
+        key_surf = FONT_SMALL.render(key, True, self.ui_colors['text_muted'])
+        val_surf = FONT_SMALL.render(value, True, value_color or self.ui_colors['text_primary'])
+        self.screen.blit(key_surf, (x, y))
+        self.screen.blit(val_surf, (x + 98, y))
+        return y + 18
+
+    def _format_leaderboard_line(self, entry: dict) -> str:
+        high_score_flag = " ★" if entry.get('high_score', False) else ""
+        return (
+            f"#{entry['rank']} "
+            f"E{entry['episode']} "
+            f"R{entry['reward']:+.2f} "
+            f"{entry['death_type']} "
+            f"{entry['arrow']}{entry['change_text']}{high_score_flag}"
+        )
     
     def draw_left_panel(self, info: dict):
         """Draw the left telemetry panel."""
@@ -164,47 +214,39 @@ class GameRenderer(BaseRenderer):
         
         # Clear left panel
         left_rect = pygame.Rect(0, 0, self.left_panel_width, SCREEN_HEIGHT)
-        pygame.draw.rect(self.screen, BLACK, left_rect)
+        pygame.draw.rect(self.screen, self.ui_colors['panel_bg'], left_rect)
         
         # Draw panel border
-        pygame.draw.line(self.screen, WHITE, (self.left_panel_width, 0), 
+        pygame.draw.line(self.screen, self.ui_colors['panel_edge'], (self.left_panel_width, 0), 
                         (self.left_panel_width, SCREEN_HEIGHT), 2)
         
         y_offset = 10
-        line_height = 18
         x_offset = self.panel_padding
         
         # Check if learning AI is active
         learning_active = info.get('mode') == 'Learning AI'
-        
-        # Basic game stats (always show)
-        basic_stats = [
-            f"Score: {info.get('score', 0)}",
-            f"Speed: {info.get('speed', 0)}",
-            f"Mode: {info.get('mode', 'Manual')}",
-        ]
+
+        y_offset = self._draw_section_header("SESSION", x_offset, y_offset, self.ui_colors['teal'])
+        y_offset = self._draw_key_value(x_offset, y_offset, "Score", str(info.get('score', 0)))
+        y_offset = self._draw_key_value(x_offset, y_offset, "Speed", str(info.get('speed', 0)))
+        y_offset = self._draw_key_value(x_offset, y_offset, "Mode", str(info.get('mode', 'Manual')))
         if info.get('model'):
-            basic_stats.append(f"Model: {info['model']}")
-        
-        for line in basic_stats:
-            text_surf = FONT_SMALL.render(line, True, WHITE)
-            self.screen.blit(text_surf, (x_offset, y_offset))
-            y_offset += line_height
-        
-        y_offset += line_height // 2  # Extra spacing
+            model_label = os.path.basename(str(info['model']))
+            y_offset = self._draw_key_value(x_offset, y_offset, "Model", model_label, self.ui_colors['text_muted'])
+        y_offset += 8
         
         # Learning stats (if learning AI is active)
         if learning_active:
             # Status indicator
             status_text = "AI LEARNING"
-            status_color = (100, 255, 100)  # Green
+            status_color = self.ui_colors['success']
             
             if info.get('teaching_mode', False):
                 status_text = "TEACHING MODE"
-                status_color = (255, 255, 0)  # Yellow
+                status_color = self.ui_colors['warn']
             elif info.get('learning_paused', False):
                 status_text = "LEARNING PAUSED"
-                status_color = (255, 100, 100)  # Red
+                status_color = self.ui_colors['danger']
             
             # Draw status with background
             status_surf = FONT.render(status_text, True, status_color)
@@ -214,117 +256,38 @@ class GameRenderer(BaseRenderer):
             # Background for status
             bg_rect = pygame.Rect(x_offset - 5, y_offset - 5, 
                                  status_rect.width + 10, status_rect.height + 10)
-            pygame.draw.rect(self.screen, (30, 30, 30), bg_rect)
-            pygame.draw.rect(self.screen, status_color, bg_rect, 3)
+            pygame.draw.rect(self.screen, (29, 37, 51), bg_rect, border_radius=4)
+            pygame.draw.rect(self.screen, status_color, bg_rect, 2, border_radius=4)
             self.screen.blit(status_surf, status_rect)
-            y_offset += status_rect.height + 15
-            
-            # Core learning stats
-            core_stats = [
-                f"Episodes: {info.get('deaths', 0)}",
-                f"Episode: {info.get('episode_progress', 'Starting')}",
-                f"Training Steps: {info.get('training_step', 0)}",
-                f"Memory: {info.get('memory_size', 0)}",
-                f"Exploration: {info.get('exploration_rate', '100%')}",
-            ]
-            
-            for line in core_stats:
-                text_surf = FONT_SMALL.render(line, True, WHITE)
-                self.screen.blit(text_surf, (x_offset, y_offset))
-                y_offset += line_height
-            
-            y_offset += line_height // 2
-            
-            # Performance stats
-            perf_stats = [
-                f"Current Reward: {info.get('current_reward', 0):.2f}",
-                f"Best Reward: {info.get('best_reward', 0):.2f}",
-                f"Recent 5 Avg: {info.get('recent_5_avg', 0):.2f}",
-            ]
-            
-            if 'previous_5_avg' in info:
-                perf_stats.append(f"Previous 5 Avg: {info['previous_5_avg']:.2f}")
+            y_offset += status_rect.height + 16
+
+            y_offset = self._draw_section_header("LEARNING", x_offset, y_offset, self.ui_colors['gold'])
+            y_offset = self._draw_key_value(x_offset, y_offset, "Episode", str(info.get('episode_progress', 'Starting')))
+            y_offset = self._draw_key_value(x_offset, y_offset, "Train Step", str(info.get('training_step', 0)))
+            y_offset = self._draw_key_value(x_offset, y_offset, "Buffer", str(info.get('memory_size', 0)))
+            y_offset = self._draw_key_value(x_offset, y_offset, "Epsilon", str(info.get('exploration_rate', '100%')))
+
+            reward_color = self.ui_colors['text_primary']
+            if info.get('current_reward', 0) > 0:
+                reward_color = self.ui_colors['success']
+            elif info.get('current_reward', 0) < 0:
+                reward_color = self.ui_colors['danger']
+            y_offset = self._draw_key_value(x_offset, y_offset, "Reward", f"{info.get('current_reward', 0):+.2f}", reward_color)
+            y_offset = self._draw_key_value(x_offset, y_offset, "Best", f"{info.get('best_reward', 0):.2f}")
+            y_offset = self._draw_key_value(x_offset, y_offset, "Recent5", f"{info.get('recent_5_avg', 0):.2f}")
+
             if 'short_term_trend' in info:
-                perf_stats.append(f"Short-term: {info['short_term_trend']:+.2f}")
-            if 'last_3_avg' in info:
-                perf_stats.append(f"Last 3 Avg: {info['last_3_avg']:.2f}")
-            
-            for line in perf_stats:
-                color = WHITE
-                if "Short-term:" in line and info.get('short_term_trend', 0) > 0:
-                    color = (100, 255, 100)  # Green for positive
-                elif "Short-term:" in line and info.get('short_term_trend', 0) < 0:
-                    color = (255, 100, 100)  # Red for negative
-                
-                text_surf = FONT_SMALL.render(line, True, color)
-                self.screen.blit(text_surf, (x_offset, y_offset))
-                y_offset += line_height
-            
-            y_offset += line_height // 2
-            
-            # Episode progress
-            episode_progress = []
-            if 'last_episode' in info:
-                episode_progress.append(f"Last Episode: {info['last_episode']:.2f}")
-            if 'second_last_episode' in info:
-                episode_progress.append(f"2nd Last: {info['second_last_episode']:.2f}")
-            if 'third_last_episode' in info:
-                episode_progress.append(f"3rd Last: {info['third_last_episode']:.2f}")
-            
-            for line in episode_progress:
-                color = WHITE
-                if "Last Episode:" in line:
-                    last_episode = info.get('last_episode', 0)
-                    if last_episode > 0:
-                        color = (100, 255, 100)  # Green for positive
-                    elif last_episode < -10:
-                        color = (255, 100, 100)  # Red for very negative
-                    else:
-                        color = (255, 165, 0)  # Orange for neutral
-                
-                text_surf = FONT_SMALL.render(line, True, color)
-                self.screen.blit(text_surf, (x_offset, y_offset))
-                y_offset += line_height
-            
-            y_offset += line_height // 2
-            
-            # Trend and learning status
-            trend_stats = []
+                trend_val = float(info.get('short_term_trend', 0))
+                trend_color = self.ui_colors['success'] if trend_val > 0 else self.ui_colors['danger'] if trend_val < 0 else self.ui_colors['warn']
+                y_offset = self._draw_key_value(x_offset, y_offset, "Short Δ", f"{trend_val:+.2f}", trend_color)
             if 'trend_status' in info:
-                trend_stats.append(f"Status: {info['trend_status']}")
-            if 'learning_status' in info:
-                trend_stats.append(f"Learning: {info['learning_status']}")
+                y_offset = self._draw_key_value(x_offset, y_offset, "Trend", str(info.get('trend_status', 'N/A')))
             if 'success_rate' in info:
-                trend_stats.append(f"Success Rate: {info['success_rate']:.1f}%")
+                success = float(info.get('success_rate', 0))
+                success_color = self.ui_colors['success'] if success >= 70 else self.ui_colors['warn'] if success >= 35 else self.ui_colors['danger']
+                y_offset = self._draw_key_value(x_offset, y_offset, "Success", f"{success:.1f}%", success_color)
             if 'avg_food_per_episode' in info:
-                trend_stats.append(f"Avg Food: {info['avg_food_per_episode']:.2f}")
-            
-            for line in trend_stats:
-                color = WHITE
-                if "Status: IMPROVING" in line:
-                    color = (100, 255, 100)  # Green
-                elif "Status: DECLINING" in line:
-                    color = (255, 100, 100)  # Red
-                elif "Status: STABLE" in line:
-                    color = (255, 255, 0)  # Yellow
-                elif "Learning: FAST" in line:
-                    color = (100, 255, 100)  # Green
-                elif "Learning: STEADY" in line:
-                    color = (255, 165, 0)  # Orange
-                elif "Learning: SLOW" in line:
-                    color = (255, 100, 100)  # Red
-                elif "Success Rate:" in line:
-                    success_rate = info.get('success_rate', 0)
-                    if success_rate > 70:
-                        color = (100, 255, 100)  # Green for high success
-                    elif success_rate > 30:
-                        color = (255, 165, 0)  # Orange for medium success
-                    else:
-                        color = (255, 100, 100)  # Red for low success
-                
-                text_surf = FONT_SMALL.render(line, True, color)
-                self.screen.blit(text_surf, (x_offset, y_offset))
-                y_offset += line_height
+                y_offset = self._draw_key_value(x_offset, y_offset, "Food/Ep", f"{info.get('avg_food_per_episode', 0):.2f}")
     
     def draw_right_panel(self):
         """Draw the right leaderboard panel."""
@@ -334,10 +297,10 @@ class GameRenderer(BaseRenderer):
         # Clear right panel
         right_rect = pygame.Rect(SCREEN_WIDTH - self.right_panel_width, 0, 
                                self.right_panel_width, SCREEN_HEIGHT)
-        pygame.draw.rect(self.screen, BLACK, right_rect)
+        pygame.draw.rect(self.screen, self.ui_colors['panel_bg'], right_rect)
         
         # Draw panel border
-        pygame.draw.line(self.screen, WHITE, (SCREEN_WIDTH - self.right_panel_width, 0), 
+        pygame.draw.line(self.screen, self.ui_colors['panel_edge'], (SCREEN_WIDTH - self.right_panel_width, 0), 
                         (SCREEN_WIDTH - self.right_panel_width, SCREEN_HEIGHT), 2)
         
         y_offset = 10
@@ -345,18 +308,15 @@ class GameRenderer(BaseRenderer):
         x_offset = SCREEN_WIDTH - self.right_panel_width + self.panel_padding
         
         # --- SESSION LEADERBOARD ---
-        session_title = FONT.render("SESSION TOP 10", True, (100, 255, 255))
-        self.screen.blit(session_title, (x_offset, y_offset))
-        y_offset += session_title.get_height() + 5
+        y_offset = self._draw_section_header("SESSION TOP 10", x_offset, y_offset, self.ui_colors['teal'])
         session_entries = self.session_leaderboard.get_formatted_entries()
         if not session_entries:
-            empty_surf = FONT_SMALL.render("No episodes yet", True, (100, 100, 100))
+            empty_surf = FONT_SMALL.render("No episodes yet", True, self.ui_colors['text_muted'])
             self.screen.blit(empty_surf, (x_offset, y_offset))
             y_offset += line_height + 5
         else:
             for entry in session_entries:
-                high_score_flag = " HighScore=true" if entry.get('high_score', False) else ""
-                line = f"{entry['rank']}. Ep {entry['episode']} - Reward: {entry['reward']:.2f} ({entry['death_type']}){high_score_flag} {entry['arrow']} {entry['change_text']}"
+                line = self._format_leaderboard_line(entry)
                 line_surf = FONT_SMALL.render(line, True, entry['color'])
                 self.screen.blit(line_surf, (x_offset, y_offset))
                 y_offset += line_height + 2
@@ -364,24 +324,21 @@ class GameRenderer(BaseRenderer):
             stats = self.session_leaderboard.get_stats()
             if stats:
                 y_offset += 5
-                stats_text = f"Highest: {stats['highest_reward']:.2f}  Avg: {stats['average_reward']:.2f}  Lowest: {stats['lowest_reward']:.2f}"
-                stats_surf = FONT_SMALL.render(stats_text, True, (200, 200, 200))
+                stats_text = f"H {stats['highest_reward']:.2f}   A {stats['average_reward']:.2f}   L {stats['lowest_reward']:.2f}"
+                stats_surf = FONT_SMALL.render(stats_text, True, self.ui_colors['text_muted'])
                 self.screen.blit(stats_surf, (x_offset, y_offset))
                 y_offset += line_height
         
         # --- ALL-TIME LEADERBOARD ---
         y_offset += 10
-        alltime_title = FONT.render("ALL-TIME TOP 10", True, (255, 255, 100))
-        self.screen.blit(alltime_title, (x_offset, y_offset))
-        y_offset += alltime_title.get_height() + 5
+        y_offset = self._draw_section_header("ALL-TIME TOP 10", x_offset, y_offset, self.ui_colors['gold'])
         entries = self.leaderboard.get_formatted_entries()
         if not entries:
-            empty_surf = FONT_SMALL.render("No episodes yet", True, (100, 100, 100))
+            empty_surf = FONT_SMALL.render("No episodes yet", True, self.ui_colors['text_muted'])
             self.screen.blit(empty_surf, (x_offset, y_offset))
             return
         for entry in entries:
-            high_score_flag = " HighScore=true" if entry.get('high_score', False) else ""
-            line = f"{entry['rank']}. Ep {entry['episode']} - Reward: {entry['reward']:.2f} ({entry['death_type']}){high_score_flag} {entry['arrow']} {entry['change_text']}"
+            line = self._format_leaderboard_line(entry)
             line_surf = FONT_SMALL.render(line, True, entry['color'])
             self.screen.blit(line_surf, (x_offset, y_offset))
             y_offset += line_height + 2
@@ -389,8 +346,8 @@ class GameRenderer(BaseRenderer):
         stats = self.leaderboard.get_stats()
         if stats:
             y_offset += 5
-            stats_text = f"Highest: {stats['highest_reward']:.2f}  Avg: {stats['average_reward']:.2f}  Lowest: {stats['lowest_reward']:.2f}"
-            stats_surf = FONT_SMALL.render(stats_text, True, (200, 200, 200))
+            stats_text = f"H {stats['highest_reward']:.2f}   A {stats['average_reward']:.2f}   L {stats['lowest_reward']:.2f}"
+            stats_surf = FONT_SMALL.render(stats_text, True, self.ui_colors['text_muted'])
             self.screen.blit(stats_surf, (x_offset, y_offset))
     
     def render(self, game_state: GameState, current_time: int, info: Optional[dict] = None):
@@ -404,7 +361,7 @@ class GameRenderer(BaseRenderer):
         if self.headless or self.screen is None:
             return
         
-        self.screen.fill(BLACK)
+        self.screen.fill(self.ui_colors['bg'])
         
         if self.cell_size is None:
             self.set_grid_size(game_state.grid_width, game_state.grid_height)
@@ -428,7 +385,7 @@ class GameRenderer(BaseRenderer):
             grid_width_px = self.cell_size * game_state.grid_width
             grid_height_px = self.cell_size * game_state.grid_height
             boundary_rect = pygame.Rect(ox, oy, grid_width_px, grid_height_px)
-            pygame.draw.rect(self.screen, (255, 0, 0), boundary_rect, 2)  # Red border
+            pygame.draw.rect(self.screen, self.ui_colors['panel_edge'], boundary_rect, 2)
         
         # Draw panels
         if info is None:

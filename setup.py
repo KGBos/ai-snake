@@ -18,5 +18,10 @@ setup(
     extras_require={
         'test': ['pytest>=7.0.0'],
     },
+    entry_points={
+        'console_scripts': [
+            'snake=ai_snake.cli:main',
+        ],
+    },
     python_requires='>=3.8',
 ) 

@@ -11,10 +11,13 @@ class AIManager:
         self.model_path = model_path
         self.grid_size = grid_size
         self.wandb_logger = wandb_logger
+        self.config_path = config_path
+        self.starvation_threshold = starvation_threshold
         self.reward_calculator = None
         if learning_ai:
             self.learning_ai_controller = LearningAIController(grid_size=grid_size, model_path=model_path, training=True, wandb_logger=wandb_logger)
             self.reward_calculator = RewardCalculator(load_config(config_path), starvation_threshold=starvation_threshold)
+            self.learning_ai_controller.reward_calculator = self.reward_calculator
         else:
             self.reward_calculator = None
 
@@ -61,8 +64,9 @@ class AIManager:
         self.learning_ai = not self.learning_ai
         if self.learning_ai and not self.learning_ai_controller:
             self.learning_ai_controller = LearningAIController(grid_size=self.grid_size, model_path=self.model_path, training=True, wandb_logger=self.wandb_logger)
-            config = load_config(CONFIG_FILE)
-            self.reward_calculator = RewardCalculator(config)
+            config = load_config(self.config_path)
+            self.reward_calculator = RewardCalculator(config, starvation_threshold=self.starvation_threshold)
+            self.learning_ai_controller.reward_calculator = self.reward_calculator
 
     def set_training_mode(self, training: bool):
         if self.learning_ai_controller:
